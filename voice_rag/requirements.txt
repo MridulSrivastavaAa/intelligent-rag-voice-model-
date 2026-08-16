@@ -1,0 +1,9 @@
+numpy
+scikit-learn
+rank-bm25
+pydantic>=2
+requests
+scipy
+sounddevice
+datasets   # optional: only needed for the real ai4bharat/MSMARCO-XI HF loader
+
