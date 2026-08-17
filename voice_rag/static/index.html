@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoiceRAG Flora • Natural Voice-Enabled RAG Pipeline</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="app-header">
+        <div class="header-container">
+            <div class="brand">
+                <div class="brand-icon">
+                    <i class="fa-solid fa-leaf"></i>
+                </div>
+                <div class="brand-title">VoiceRAG <span class="brand-tag">Flora</span></div>
+            </div>
+            <div class="header-meta">
+                <div class="status-badge" id="system-status">
+                    <span class="status-dot"></span>
+                    <span id="backend-info">Connecting...</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Layout -->
+    <main class="main-layout">
+        
+        <!-- Left Section: Query Console & Results -->
+        <section class="console-section">
+
+            <!-- Voice & Query Card -->
+            <div class="card voice-hero">
+                <div class="voice-orb-container">
+                    <button class="voice-orb" id="mic-btn" title="Click to start/stop recording">
+                        <i class="fa-solid fa-microphone" id="mic-icon"></i>
+                    </button>
+                </div>
+
+                <div id="recording-status" style="font-weight: 600; color: var(--primary-forest); margin-bottom: 0.5rem;">
+                    Click microphone or type query
+                </div>
+
+                <canvas id="wave-canvas" class="wave-canvas"></canvas>
+
+                <div class="search-input-wrapper">
+                    <input type="text" id="query-input" class="search-input" placeholder="Ask a question in Hindi or English (e.g. मधुमेह के लक्षण क्या हैं?)..." />
+                    <button class="btn btn-primary" id="send-btn">
+                        <i class="fa-solid fa-paper-plane"></i> Ask
+                    </button>
+                </div>
+
+                <!-- Sample Presets -->
+                <div class="presets-container">
+                    <span class="preset-pill" data-query="मधुमेह के लक्षण क्या हैं?">🌱 मधुमेह के लक्षण</span>
+                    <span class="preset-pill" data-query="भारत की राजधानी कौन सी है?">🏛️ भारत की राजधानी</span>
+                    <span class="preset-pill" data-query="what are the symptoms of diabetes">🩺 Diabetes Symptoms</span>
+                    <span class="preset-pill" data-query="what is the capital of india">🌏 Capital of India</span>
+                    <span class="preset-pill" data-query="योग के क्या लाभ हैं?">🧘‍♀️ योग के लाभ</span>
+                </div>
+            </div>
+
+            <!-- Answer Output Card -->
+            <div class="card" id="answer-card" style="margin-top: 1.5rem; display: none;">
+                <h3 class="card-title">
+                    <i class="fa-solid fa-feather"></i> Grounded Answer
+                </h3>
+
+                <div class="answer-box">
+                    <div class="answer-text" id="answer-text">Answer will appear here...</div>
+                    
+                    <div style="margin-top: 1rem;">
+                        <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">SOURCES CITED:</span>
+                        <div class="citations-list" id="citations-list"></div>
+                    </div>
+                </div>
+
+                <!-- Spoken Audio Player -->
+                <div class="audio-controls" id="audio-container" style="display: none;">
+                    <button class="btn btn-primary" id="play-audio-btn" style="border-radius: 50%; width: 44px; height: 44px; padding: 0; justify-content: center;">
+                        <i class="fa-solid fa-play" id="play-icon"></i>
+                    </button>
+                    <div>
+                        <div style="font-weight: 600; font-size: 0.9rem; color: var(--primary-dark);" id="tts-speaker-info">
+                            🔊 Sarvam AI Voice Reply (Anushka)
+                        </div>
+                        <div style="font-size: 0.78rem; color: var(--text-muted);" id="tts-latency-info">
+                            Synthesized in -- ms
+                        </div>
+                    </div>
+                    <audio id="audio-element" style="display: none;"></audio>
+                </div>
+            </div>
+
+            <!-- Stage Timings Flow Card -->
+            <div class="card" id="timing-card" style="margin-top: 1.5rem; display: none;">
+                <h3 class="card-title">
+                    <i class="fa-solid fa-diagram-project"></i> Pipeline Execution Stages
+                </h3>
+
+                <div class="stages-grid" id="stages-grid">
+                    <!-- Dynamic stage step pills inserted here -->
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Right Section: Retrieved Passages Inspector -->
+        <aside class="inspector-section">
+
+            <div class="card">
+                <h3 class="card-title">
+                    <i class="fa-solid fa-layer-group"></i> Hybrid Retrieved Context
+                </h3>
+
+                <div id="passages-container">
+                    <div style="color: var(--text-muted); text-align: center; padding: 2rem 0; font-size: 0.9rem;">
+                        No retrieval performed yet.<br>Ask a question to inspect RRF fused passages.
+                    </div>
+                </div>
+            </div>
+
+        </aside>
+
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
