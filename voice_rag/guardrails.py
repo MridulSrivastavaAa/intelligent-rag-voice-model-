@@ -65,7 +65,11 @@ class InputGuardrail:
 
             if q_terms:
                 overlap_ratio = len(q_terms & ctx_terms) / len(q_terms)
-                overlap_ok = overlap_ratio >= 0.25
+                if retrieval.max_score >= 0.15 or retrieval.is_confident:
+                    overlap_ok = True
+                else:
+                    overlap_ok = overlap_ratio >= 0.20
+
 
         is_on_topic = score_ok and overlap_ok
         reasons = []

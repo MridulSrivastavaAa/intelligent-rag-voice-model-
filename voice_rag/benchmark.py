@@ -70,8 +70,9 @@ def run_benchmark(n_queries: int = 30, top_k: int = 4, verbose: bool = True):
     statuses = defaultdict(int)
     records = []
     for q in test_set:
-        resp = harness.run(mock_text=q, audio_seconds=3.0)
+        resp = harness.run(mock_text=q, audio_seconds=3.0, play_audio=False)
         statuses[resp.status] += 1
+
         local_ms = 0.0
         for st in resp.stage_timings:
             if st.stage == "stt":
