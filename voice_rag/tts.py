@@ -22,6 +22,8 @@ load_dotenv()
 SARVAM_TTS_URL = "https://api.sarvam.ai/text-to-speech"
 
 
+import tempfile
+
 class SarvamTTS:
     def __init__(self, api_key: str | None = None, model: str = "bulbul:v2",
                  speaker: str = "anushka", target_language_code: str = "hi-IN"):
@@ -31,18 +33,18 @@ class SarvamTTS:
         self.target_language_code = target_language_code
 
     def _play_wav(self, audio_path: str):
-        """Plays WAV audio file through local speakers synchronously."""
-        if not os.path.exists(audio_path):
+        """Plays WAV audio file through local speakers synchronously if supported."""
+        if not audio_path or not os.path.exists(audio_path):
             return
         try:
             import winsound
             print(f"[tts] Speaking answer out loud...")
             winsound.PlaySound(audio_path, winsound.SND_FILENAME)
         except Exception as e:
-            print(f"[tts] Playback notice: {e}")
+            # On Linux/Vercel winsound is not available, which is completely normal
+            pass
 
-
-    def synthesize(self, text: str, output_path: str = "answer_reply.wav",
+    def synthesize(self, text: str, output_path: str | None = None,
                    play_audio: bool = True) -> TTSResult:
         t0 = time.perf_counter()
         clean_text = text.strip()
@@ -50,6 +52,9 @@ class SarvamTTS:
         if not clean_text:
             return TTSResult(audio_path="", latency_ms=0.0, provider="sarvam",
                              speaker=self.speaker, is_mocked=True)
+
+        if not output_path or output_path == "answer_reply.wav":
+            output_path = os.path.join(tempfile.gettempdir(), "answer_reply.wav")
 
         if self.api_key:
             try:
