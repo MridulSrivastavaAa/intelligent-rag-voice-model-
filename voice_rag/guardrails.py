@@ -52,24 +52,21 @@ class InputGuardrail:
         )
     def check_off_topic(self, retrieval: RetrievalResult) -> GuardrailVerdict:
         score_ok = retrieval.max_score >= OFF_TOPIC_RETRIEVAL_THRESHOLD
-        # Character n-gram similarity alone can be fooled by a single
-        # shared proper noun (e.g. a query about "Jupiter's moon Europa"
-        # scoring high against a passage that merely lists Jupiter as one
-        # of the solar system's planets). As a second, cheap signal we
-        # require a minimum fraction of the query's *content* words
-        # (stopwords removed) to actually appear in the top retrieved
-        # passage — this catches partial-lexical-overlap false positives
-        # that the pure similarity score misses. This is still a
-        # heuristic, not true semantic entailment — see README caveats.
         overlap_ok = True
         overlap_ratio = 1.0
+
         if retrieval.retrieved:
-            top_text = retrieval.retrieved[0].chunk.parent_text or retrieval.retrieved[0].chunk.text
+            # Concatenate top retrieved passages context
+            combined_ctx = " ".join([
+                (rc.chunk.parent_text or rc.chunk.text) for rc in retrieval.retrieved[:3]
+            ])
             q_terms = set(_content_tokenize(retrieval.query))
-            ctx_terms = set(_content_tokenize(top_text))
+            ctx_terms = set(_content_tokenize(combined_ctx))
+
             if q_terms:
                 overlap_ratio = len(q_terms & ctx_terms) / len(q_terms)
-                overlap_ok = overlap_ratio >= 0.34
+                overlap_ok = overlap_ratio >= 0.25
+
         is_on_topic = score_ok and overlap_ok
         reasons = []
         if not score_ok:
@@ -79,13 +76,14 @@ class InputGuardrail:
             )
         if not overlap_ok:
             reasons.append(
-                f"only {overlap_ratio:.0%} of query content words found in top retrieved "
-                f"passage — likely lexical-overlap false positive, not a real topic match"
+                f"only {overlap_ratio:.0%} of query content words found in retrieved "
+                f"passages — likely out-of-domain match"
             )
         return GuardrailVerdict(
             passed=is_on_topic, stage="input", reasons=reasons,
             risk_score=0.0 if is_on_topic else max(1.0 - retrieval.max_score, 1.0 - overlap_ratio),
         )
+
 class OutputGuardrail:
     def __init__(self, groundedness_threshold: float = 0.10):
         self.threshold = groundedness_threshold

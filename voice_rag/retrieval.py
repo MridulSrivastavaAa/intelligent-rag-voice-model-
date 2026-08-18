@@ -106,6 +106,26 @@ class StrategyIndex:
         return results
 
 
+_HINGLISH_MAP = {
+    "bharat": "भारत", "rajdhani": "राजधानी", "kya": "क्या", "hai": "है", "kaun": "कौन", "si": "सी",
+    "lakshan": "लक्षण", "madhumeh": "मधुमेह", "samvidhan": "संविधान", "prakash": "प्रकाश",
+    "photosynthesis": "प्रकाश संश्लेषण", "taj": "ताज", "mahal": "महल", "sanshleshana": "संश्लेषण",
+    "yoga": "योग", "ganga": "गंगा", "nadi": "नदी", "sthapna": "स्थापना", "computer": "कंप्यूटर",
+    "memory": "मेमोरी", "jalvayu": "जलवायु", "parivartan": "परिवर्तन", "swatantrata": "स्वतंत्रता",
+    "divas": "दिवस", "climate": "जलवायु", "change": "परिवर्तन", "rbi": "आरबीआई",
+}
+
+
+def _expand_query(query: str) -> str:
+    import re
+    words = re.findall(r"\w+", query.lower())
+    expanded = [query]
+    mapped = [_HINGLISH_MAP[w] for w in words if w in _HINGLISH_MAP]
+    if mapped:
+        expanded.append(" ".join(mapped))
+    return " ".join(expanded)
+
+
 class HybridMultiStrategyRetriever:
     """Builds one StrategyIndex per chunking strategy present in the chunk
     set, searches all of them, and fuses results across strategies (again
@@ -120,10 +140,11 @@ class HybridMultiStrategyRetriever:
 
     def retrieve(self, query: str, top_k: int = 5, per_strategy_k: int = 8) -> RetrievalResult:
         t0 = time.perf_counter()
+        expanded_q = _expand_query(query)
         cross_strategy_scores: Dict[str, dict] = {}
         k_rrf = 60
         for strat_name, index in self.indices.items():
-            hits = index.search(query, top_k=per_strategy_k)
+            hits = index.search(expanded_q, top_k=per_strategy_k)
             for rank, hit in enumerate(hits):
                 cid = hit["chunk"].chunk_id
                 fused_bonus = 1.0 / (k_rrf + rank + 1)
@@ -153,3 +174,4 @@ class HybridMultiStrategyRetriever:
             max_score=max_score,
             is_confident=max_score >= 0.08,  # tuned against TF-IDF cosine scale
         )
+

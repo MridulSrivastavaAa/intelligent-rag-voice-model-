@@ -1,125 +1,262 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VoiceRAG Flora • Natural Voice-Enabled RAG Pipeline</title>
+    <meta name="description" content="State-of-the-art Voice-enabled Retrieval-Augmented Generation (RAG) system with multi-strategy retrieval, Sarvam AI STT/TTS, grounded generation, and real-time guardrails.">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
 
-    <!-- Header -->
+    <!-- Sticky Glass Header -->
     <header class="app-header">
         <div class="header-container">
-            <div class="brand">
-                <div class="brand-icon">
+            <div class="brand-wrapper" id="brand-home" title="VoiceRAG Flora">
+                <div class="brand-logo-orb">
                     <i class="fa-solid fa-leaf"></i>
                 </div>
-                <div class="brand-title">VoiceRAG <span class="brand-tag">Flora</span></div>
-            </div>
-            <div class="header-meta">
-                <div class="status-badge" id="system-status">
-                    <span class="status-dot"></span>
-                    <span id="backend-info">Connecting...</span>
+                <div class="brand-text-block">
+                    <div class="brand-title">VoiceRAG <span class="brand-tag">Flora</span></div>
+                    <div class="brand-sub">Natural Voice & Grounded Multi-Strategy RAG</div>
                 </div>
+            </div>
+
+            <div class="header-actions">
+                <div class="status-badge" id="system-status-badge" title="Live Pipeline Backend Status">
+                    <span class="status-dot" id="system-status-dot"></span>
+                    <span id="backend-info">Connecting to server...</span>
+                </div>
+
+                <button class="header-btn" id="open-docs-btn" title="Explore Indexed Corpus Documents">
+                    <i class="fa-solid fa-database"></i>
+                    <span>Corpus</span>
+                </button>
+
+                <button class="header-btn" id="open-history-btn" title="View Query History">
+                    <i class="fa-solid fa-clock-rotate-left"></i>
+                    <span>History</span>
+                </button>
+
+                <button class="header-btn icon-btn" id="theme-toggle-btn" title="Toggle Dark/Light Mode">
+                    <i class="fa-solid fa-moon" id="theme-icon"></i>
+                </button>
             </div>
         </div>
     </header>
 
-    <!-- Main Layout -->
+    <!-- Main Application Layout -->
     <main class="main-layout">
-        
-        <!-- Left Section: Query Console & Results -->
+
+        <!-- Left Column: Voice Console, Answers, Timings -->
         <section class="console-section">
 
-            <!-- Voice & Query Card -->
-            <div class="card voice-hero">
-                <div class="voice-orb-container">
-                    <button class="voice-orb" id="mic-btn" title="Click to start/stop recording">
+            <!-- Voice & Query Hero Card -->
+            <div class="card voice-hero-card">
+                
+                <!-- 3D Voice Orb with Pulsing Rings -->
+                <div class="voice-orb-wrapper">
+                    <div class="orb-ring orb-ring-1"></div>
+                    <div class="orb-ring orb-ring-2"></div>
+                    <button class="voice-orb-btn" id="mic-btn" title="Click to speak (Microphone Recording)">
                         <i class="fa-solid fa-microphone" id="mic-icon"></i>
                     </button>
                 </div>
 
-                <div id="recording-status" style="font-weight: 600; color: var(--primary-forest); margin-bottom: 0.5rem;">
-                    Click microphone or type query
+                <!-- Status Pill & Timer -->
+                <div>
+                    <div class="voice-status-pill" id="voice-status-pill">
+                        <span id="recording-status">Click orb to speak or enter question below</span>
+                        <span class="record-timer" id="record-timer">00:00</span>
+                    </div>
                 </div>
 
-                <canvas id="wave-canvas" class="wave-canvas"></canvas>
-
-                <div class="search-input-wrapper">
-                    <input type="text" id="query-input" class="search-input" placeholder="Ask a question in Hindi or English (e.g. मधुमेह के लक्षण क्या हैं?)..." />
-                    <button class="btn btn-primary" id="send-btn">
-                        <i class="fa-solid fa-paper-plane"></i> Ask
-                    </button>
+                <!-- Live Audio Visualizer Canvas -->
+                <div class="visualizer-container">
+                    <canvas id="wave-canvas" class="wave-canvas"></canvas>
                 </div>
 
-                <!-- Sample Presets -->
-                <div class="presets-container">
-                    <span class="preset-pill" data-query="मधुमेह के लक्षण क्या हैं?">🌱 मधुमेह के लक्षण</span>
-                    <span class="preset-pill" data-query="भारत की राजधानी कौन सी है?">🏛️ भारत की राजधानी</span>
-                    <span class="preset-pill" data-query="what are the symptoms of diabetes">🩺 Diabetes Symptoms</span>
-                    <span class="preset-pill" data-query="what is the capital of india">🌏 Capital of India</span>
-                    <span class="preset-pill" data-query="योग के क्या लाभ हैं?">🧘‍♀️ योग के लाभ</span>
+                <!-- Query Input Form -->
+                <form class="search-form" id="search-form" onsubmit="return false;">
+                    <div class="search-input-box">
+                        <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                        <input 
+                            type="text" 
+                            id="query-input" 
+                            class="query-input" 
+                            placeholder="Ask a question in Hindi or English (e.g. मधुमेह के लक्षण क्या हैं?)..." 
+                            autocomplete="off" 
+                        />
+                        
+                        <div class="input-actions">
+                            <button type="button" class="clear-btn" id="clear-input-btn" title="Clear input">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+
+                            <!-- Hidden File Input for Audio Upload -->
+                            <input type="file" id="audio-file-input" accept="audio/*,.wav,.mp3,.webm,.ogg,.m4a" style="display: none;" />
+                            <button type="button" class="file-upload-btn" id="upload-audio-btn" title="Upload Audio File (.wav, .mp3, .webm, .m4a)">
+                                <i class="fa-solid fa-file-audio"></i>
+                            </button>
+
+                            <button type="submit" class="btn-ask" id="send-btn">
+                                <span>Ask</span>
+                                <i class="fa-solid fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Configuration Options Row -->
+                    <div class="query-controls-row">
+                        <div class="controls-group">
+                            <label for="language-select"><i class="fa-solid fa-language"></i> Language:</label>
+                            <select id="language-select" class="custom-select">
+                                <option value="auto">🌐 Auto Detect</option>
+                                <option value="hi-IN" selected>🇮🇳 Hindi (हिन्दी)</option>
+                                <option value="en-IN">🇬🇧 English (Indian)</option>
+                            </select>
+                        </div>
+
+                        <div class="controls-group">
+                            <label for="topk-select"><i class="fa-solid fa-layer-group"></i> Top-K Chunks:</label>
+                            <select id="topk-select" class="custom-select">
+                                <option value="2">Top 2</option>
+                                <option value="4" selected>Top 4 (Recommended)</option>
+                                <option value="6">Top 6</option>
+                                <option value="8">Top 8</option>
+                            </select>
+                        </div>
+
+                        <div class="controls-group">
+                            <label><input type="checkbox" id="auto-speak-toggle" checked style="accent-color: var(--primary); margin-right: 4px;"> Auto-Play Voice</label>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- Categorized Sample Query Chips -->
+                <div class="presets-section">
+                    <div class="presets-title">Suggested Inquiries (Hindi & English)</div>
+                    <div class="presets-grid" id="presets-grid">
+                        <button class="preset-chip" data-query="मधुमेह के लक्षण क्या हैं?">🩺 मधुमेह के लक्षण</button>
+                        <button class="preset-chip" data-query="भारत की राजधानी कौन सी है?">🏛️ भारत की राजधानी</button>
+                        <button class="preset-chip" data-query="रिजर्व बैंक ऑफ इंडिया की स्थापना कब हुई?">🏦 RBI स्थापना</button>
+                        <button class="preset-chip" data-query="what are the symptoms of diabetes">🩺 Diabetes Symptoms</button>
+                        <button class="preset-chip" data-query="what is the capital of india">🌏 Capital of India</button>
+                        <button class="preset-chip" data-query="योग के क्या लाभ हैं?">🧘‍♀️ योग के लाभ</button>
+                        <button class="preset-chip" data-query="प्रकाश संश्लेषण की प्रक्रिया क्या है?">🌿 Photosynthesis</button>
+                        <button class="preset-chip" data-query="ताजमहल का निर्माण किसने करवाया था?">🕌 ताजमहल निर्माण</button>
+                    </div>
                 </div>
+
             </div>
 
-            <!-- Answer Output Card -->
-            <div class="card" id="answer-card" style="margin-top: 1.5rem; display: none;">
-                <h3 class="card-title">
-                    <i class="fa-solid fa-feather"></i> Grounded Answer
-                </h3>
+            <!-- Grounded Answer Card -->
+            <div class="card answer-card" id="answer-card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <i class="fa-solid fa-feather-pointed"></i>
+                        <span>Grounded Answer</span>
+                    </div>
+                    <div class="answer-header-meta">
+                        <span class="badge-confidence" id="answer-status-badge">✅ Verified Grounded</span>
+                    </div>
+                </div>
 
-                <div class="answer-box">
-                    <div class="answer-text" id="answer-text">Answer will appear here...</div>
+                <div class="answer-content-box">
+                    <div class="answer-text" id="answer-text">Answer will be generated here...</div>
+                </div>
+
+                <div class="answer-actions-bar">
+                    <div class="citations-wrap">
+                        <span class="citations-label">Sources Cited:</span>
+                        <div id="citations-list" style="display: inline-flex; gap: 0.4rem; flex-wrap: wrap;"></div>
+                    </div>
+
+                    <div class="action-buttons-group">
+                        <button class="btn-icon-subtle" id="copy-answer-btn" title="Copy answer text to clipboard">
+                            <i class="fa-solid fa-copy"></i> Copy
+                        </button>
+                        <button class="btn-icon-subtle" id="speak-browser-btn" title="Speak via Browser Synthesis">
+                            <i class="fa-solid fa-volume-high"></i> Speak
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Spoken Audio Player Bar -->
+                <div class="audio-player-bar" id="audio-player-bar" style="display: none;">
+                    <button class="play-pause-btn" id="play-pause-btn" title="Play / Pause Spoken Audio">
+                        <i class="fa-solid fa-play" id="audio-play-icon"></i>
+                    </button>
+
+                    <div class="audio-meta-block">
+                        <div class="audio-title-line">
+                            <span class="audio-speaker-tag" id="audio-speaker-label">
+                                <i class="fa-solid fa-waveform-lines"></i>
+                                <span>Sarvam AI Spoken Reply (Anushka)</span>
+                            </span>
+                            <span class="audio-latency-tag" id="audio-latency-label">0.0 ms</span>
+                        </div>
+                        <input type="range" class="audio-seeker" id="audio-seeker" value="0" min="0" max="100" step="0.1" />
+                    </div>
+
+                    <button class="audio-speed-btn" id="audio-speed-btn" title="Cycle playback speed">1.0x</button>
                     
-                    <div style="margin-top: 1rem;">
-                        <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">SOURCES CITED:</span>
-                        <div class="citations-list" id="citations-list"></div>
-                    </div>
-                </div>
+                    <a id="download-audio-btn" class="btn-icon-subtle" download="voice_rag_reply.wav" title="Download WAV Audio" style="display: none;">
+                        <i class="fa-solid fa-download"></i>
+                    </a>
 
-                <!-- Spoken Audio Player -->
-                <div class="audio-controls" id="audio-container" style="display: none;">
-                    <button class="btn btn-primary" id="play-audio-btn" style="border-radius: 50%; width: 44px; height: 44px; padding: 0; justify-content: center;">
-                        <i class="fa-solid fa-play" id="play-icon"></i>
-                    </button>
-                    <div>
-                        <div style="font-weight: 600; font-size: 0.9rem; color: var(--primary-dark);" id="tts-speaker-info">
-                            🔊 Sarvam AI Voice Reply (Anushka)
-                        </div>
-                        <div style="font-size: 0.78rem; color: var(--text-muted);" id="tts-latency-info">
-                            Synthesized in -- ms
-                        </div>
-                    </div>
-                    <audio id="audio-element" style="display: none;"></audio>
+                    <audio id="audio-element" preload="auto"></audio>
                 </div>
             </div>
 
-            <!-- Stage Timings Flow Card -->
-            <div class="card" id="timing-card" style="margin-top: 1.5rem; display: none;">
-                <h3 class="card-title">
-                    <i class="fa-solid fa-diagram-project"></i> Pipeline Execution Stages
-                </h3>
+            <!-- Guardrails Verdict Card -->
+            <div class="card guardrails-card" id="guardrails-card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <i class="fa-solid fa-shield-halved"></i>
+                        <span>Guardrail Safety & Grounding Verdicts</span>
+                    </div>
+                </div>
 
-                <div class="stages-grid" id="stages-grid">
-                    <!-- Dynamic stage step pills inserted here -->
+                <div class="guardrail-badges-grid" id="guardrail-badges-grid">
+                    <!-- Dynamic Badges -->
+                </div>
+            </div>
+
+            <!-- Pipeline Execution Stages Waterfall Card -->
+            <div class="card stages-card" id="stages-card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <i class="fa-solid fa-diagram-project"></i>
+                        <span>Pipeline Execution Waterfall</span>
+                    </div>
+                    <div class="badge-confidence" id="total-latency-badge">Total: 0.0 ms</div>
+                </div>
+
+                <div class="stages-waterfall" id="stages-waterfall">
+                    <!-- Dynamic Stage Rows -->
                 </div>
             </div>
 
         </section>
 
-        <!-- Right Section: Retrieved Passages Inspector -->
-        <aside class="inspector-section">
+        <!-- Right Column: Hybrid Retrieved Context Inspector -->
+        <aside class="inspector-sidebar">
 
             <div class="card">
-                <h3 class="card-title">
-                    <i class="fa-solid fa-layer-group"></i> Hybrid Retrieved Context
-                </h3>
+                <div class="card-header">
+                    <div class="card-title">
+                        <i class="fa-solid fa-layer-group"></i>
+                        <span>Retrieved Context</span>
+                    </div>
+                    <span style="font-size: 0.8rem; color: var(--text-dim);" id="retrieval-count-label">0 Chunks</span>
+                </div>
 
                 <div id="passages-container">
-                    <div style="color: var(--text-muted); text-align: center; padding: 2rem 0; font-size: 0.9rem;">
-                        No retrieval performed yet.<br>Ask a question to inspect RRF fused passages.
+                    <div style="color: var(--text-muted); text-align: center; padding: 3rem 1rem; font-size: 0.92rem;">
+                        <i class="fa-solid fa-magnifying-glass-chart" style="font-size: 2.5rem; opacity: 0.35; margin-bottom: 1rem; display: block;"></i>
+                        No retrieval performed yet.<br>Ask a question or speak to inspect reciprocal rank fused passages.
                     </div>
                 </div>
             </div>
@@ -128,6 +265,52 @@
 
     </main>
 
+    <!-- Corpus Explorer Modal -->
+    <div class="modal-overlay" id="docs-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="card-title">
+                    <i class="fa-solid fa-database"></i>
+                    <span>Indexed MSMARCO-XI Corpus Documents</span>
+                </div>
+                <button class="modal-close-btn" id="close-docs-modal" title="Close modal">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 1.2rem;">
+                    <input type="text" id="doc-search-input" class="query-input" placeholder="Search corpus documents by keyword..." style="background: var(--bg-card); border: 1px solid var(--border-glass); border-radius: var(--radius-md); padding: 0.65rem 1rem; width: 100%; font-size: 0.95rem;" />
+                </div>
+                <div id="docs-list-container">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- History Drawer -->
+    <aside class="history-drawer" id="history-drawer">
+        <div class="modal-header">
+            <div class="card-title">
+                <i class="fa-solid fa-clock-rotate-left"></i>
+                <span>Query History</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <button class="btn-icon-subtle" id="clear-history-btn" title="Clear all history">Clear</button>
+                <button class="modal-close-btn" id="close-history-drawer">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        </div>
+        <div class="modal-body" id="history-list-container">
+            <div style="color: var(--text-dim); text-align: center; padding: 2rem;">No recent queries.</div>
+        </div>
+    </aside>
+
+    <!-- Toast Notification Hub -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Controller Application Script -->
     <script src="app.js"></script>
 </body>
 </html>

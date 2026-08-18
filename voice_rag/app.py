@@ -67,8 +67,25 @@ def health_check():
         "docs_count": len(DOCS),
         "chunks_count": len(CHUNKS),
         "generator_backend": GENERATOR.__class__.__name__,
-        "stt_provider": STT.provider if hasattr(STT, 'provider') else "sarvam",
-        "tts_speaker": TTS.speaker if hasattr(TTS, 'speaker') else "anushka",
+        "stt_provider": getattr(STT, 'provider', 'sarvam'),
+        "tts_speaker": getattr(TTS, 'speaker', 'anushka'),
+        "top_k_default": HARNESS.top_k,
+    }
+
+
+@app.get("/api/stats")
+def get_stats():
+    strategies = {}
+    for c in CHUNKS:
+        strat = getattr(c, "strategy", "unknown")
+        strategies[strat] = strategies.get(strat, 0) + 1
+    return {
+        "docs_count": len(DOCS),
+        "chunks_count": len(CHUNKS),
+        "strategies": strategies,
+        "generator": GENERATOR.__class__.__name__,
+        "stt_provider": getattr(STT, 'provider', 'sarvam'),
+        "tts_speaker": getattr(TTS, 'speaker', 'anushka'),
     }
 
 
@@ -77,26 +94,59 @@ def get_documents() -> List[Dict]:
     return DOCS
 
 
+from fastapi import Request
+
 @app.post("/api/query")
-async def process_query(
-    text: Optional[str] = Form(None),
-    top_k: int = Form(4),
-    audio: Optional[UploadFile] = File(None)
-):
+async def process_query(request: Request):
     temp_audio_path = None
     try:
-        mock_text = text.strip() if text and text.strip() else None
-        
-        if audio:
-            # Save uploaded browser audio to temporary file
-            suffix = ".wav" if audio.content_type and "wav" in audio.content_type else ".mp3"
+        content_type = request.headers.get("content-type", "")
+        text = None
+        top_k = 4
+        audio_bytes = None
+        audio_filename = None
+
+        if "application/json" in content_type:
+            data = await request.json()
+            text = data.get("text")
+            top_k = int(data.get("top_k", 4))
+        else:
+            form = await request.form()
+            text = form.get("text")
+            if form.get("top_k"):
+                try:
+                    top_k = int(form.get("top_k"))
+                except (ValueError, TypeError):
+                    top_k = 4
+            audio_field = form.get("audio")
+            if audio_field and hasattr(audio_field, "read"):
+                audio_bytes = await audio_field.read()
+                audio_filename = getattr(audio_field, "filename", "audio.wav")
+
+        mock_text = text.strip() if text and str(text).strip() else None
+
+        if audio_bytes:
+            suffix = ".wav"
+            if audio_filename and os.path.splitext(audio_filename)[1]:
+                suffix = os.path.splitext(audio_filename)[1].lower()
+            elif "webm" in content_type:
+                suffix = ".webm"
+            elif "mp3" in content_type:
+                suffix = ".mp3"
+            elif "ogg" in content_type:
+                suffix = ".ogg"
+
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                content = await audio.read()
-                tmp.write(content)
+                tmp.write(audio_bytes)
                 temp_audio_path = tmp.name
 
         # Execute harness without blocking server playback (play_audio=False)
-        resp = HARNESS.run(audio_path=temp_audio_path, mock_text=mock_text, play_audio=False)
+        resp = HARNESS.run(
+            audio_path=temp_audio_path,
+            mock_text=mock_text,
+            play_audio=False,
+            top_k=top_k
+        )
         resp_dict = resp.model_dump()
 
         # Attach Base64 Audio if TTS audio was generated

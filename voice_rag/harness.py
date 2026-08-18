@@ -60,11 +60,13 @@ class VoiceRAGHarness:
         self.top_k = top_k
 
     def run(self, audio_path: str | None = None, mock_text: str | None = None,
-            audio_seconds: float = 3.0, play_audio: bool = True) -> PipelineResponse:
+            audio_seconds: float = 3.0, play_audio: bool = True,
+            top_k: int | None = None) -> PipelineResponse:
         request_id = str(uuid.uuid4())[:8]
         t_start = time.perf_counter()
         timings: list[StageTiming] = []
         resp = PipelineResponse(request_id=request_id, query_text=mock_text or "")
+        k = top_k if top_k is not None else self.top_k
 
         try:
             # 1. STT
@@ -95,7 +97,7 @@ class VoiceRAGHarness:
 
             # 3. retrieval
             retrieval = _run_stage(
-                "retrieval", lambda: self.retriever.retrieve(transcription.text, top_k=self.top_k),
+                "retrieval", lambda: self.retriever.retrieve(transcription.text, top_k=k),
                 timings, max_retries=1,
             )
             resp.retrieval = retrieval

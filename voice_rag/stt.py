@@ -47,8 +47,17 @@ class SarvamSTT:
         t0 = time.perf_counter()
 
         if audio_path and self.api_key:
+            ext = os.path.splitext(audio_path)[1].lower()
+            mime_types = {
+                ".webm": "audio/webm",
+                ".mp3": "audio/mp3",
+                ".m4a": "audio/m4a",
+                ".ogg": "audio/ogg",
+                ".wav": "audio/wav"
+            }
+            mime_type = mime_types.get(ext, "audio/wav")
             with open(audio_path, "rb") as f:
-                files = {"file": (os.path.basename(audio_path), f, "audio/wav")}
+                files = {"file": (os.path.basename(audio_path), f, mime_type)}
                 data = {"model": self.model, "mode": self.mode,
                         "language_code": self.language_code}
                 headers = {"api-subscription-key": self.api_key}
@@ -56,6 +65,7 @@ class SarvamSTT:
                                       files=files, data=data, timeout=30)
                 resp.raise_for_status()
                 payload = resp.json()
+
             latency_ms = (time.perf_counter() - t0) * 1000
             return TranscriptionResult(
                 text=payload.get("transcript", ""),
