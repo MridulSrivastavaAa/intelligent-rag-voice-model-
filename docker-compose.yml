@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # ----------------------------------------------------------------------------
+  # Voice RAG Backend FastAPI Server
+  # ----------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: voice_rag_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
+      - GENERATOR_BACKEND=auto
+      - SARVAM_API_KEY=${SARVAM_API_KEY:-sk_bqaf8fve_HqFltnSaJ6ok9jH5uQx4r85e}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    depends_on:
+      - ollama
+    networks:
+      - voicerag_net
+
+  # ----------------------------------------------------------------------------
+  # Ollama LLM Service (Local Model Runner)
+  # ----------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: voice_rag_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_storage:/root/.ollama
+    networks:
+      - voicerag_net
+
+networks:
+  voicerag_net:
+    driver: bridge
+
+volumes:
+  ollama_storage:
+    driver: local

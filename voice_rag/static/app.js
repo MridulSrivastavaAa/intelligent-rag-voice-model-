@@ -97,6 +97,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let queryHistory = JSON.parse(localStorage.getItem('voicerag_history') || '[]');
 
     // =========================================================================
+    // Dynamic Backend API URL (supports Vercel Frontend + Docker Backend)
+    // =========================================================================
+    const API_BASE = (window.VOICE_RAG_API_URL || localStorage.getItem('voicerag_api_url') || '').replace(/\/$/, '');
+
+    // =========================================================================
     // Initialization
     // =========================================================================
     initTheme();
@@ -141,7 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================================
     async function fetchSystemHealth() {
         try {
-            const res = await fetch('/api/health');
+            const res = await fetch(`${API_BASE}/api/health`);
             if (res.ok) {
                 const data = await res.json();
                 systemStatusDot.classList.remove('offline');
@@ -560,12 +565,12 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             let res;
             if (payload instanceof FormData) {
-                res = await fetch('/api/query', {
+                res = await fetch(`${API_BASE}/api/query`, {
                     method: 'POST',
                     body: payload
                 });
             } else {
-                res = await fetch('/api/query', {
+                res = await fetch(`${API_BASE}/api/query`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -1134,7 +1139,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (allDocuments.length === 0 && docsListContainer) {
             docsListContainer.innerHTML = '<div style="text-align: center; padding: 2rem;"><div class="spinner" style="margin: 0 auto 1rem;"></div>Loading MSMARCO-XI Corpus...</div>';
             try {
-                const res = await fetch('/api/documents');
+                const res = await fetch(`${API_BASE}/api/documents`);
                 if (res.ok) {
                     allDocuments = await res.json();
                     renderCorpusDocuments(allDocuments);

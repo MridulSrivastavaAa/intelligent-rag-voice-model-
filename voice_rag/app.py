@@ -24,6 +24,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+_CURR_DIR = os.path.dirname(os.path.abspath(__file__))
+if _CURR_DIR not in sys.path:
+    sys.path.insert(0, _CURR_DIR)
+
 from data_loader import load_sample_docs
 from chunking import build_all_chunks
 from retrieval import HybridMultiStrategyRetriever
