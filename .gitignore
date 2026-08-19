@@ -1,4 +1,7 @@
 .env
 __pycache__/
 *.py[cod]
-
+.vercel/
+*.wav
+*.mp3
+*.webm
