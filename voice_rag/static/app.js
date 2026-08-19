@@ -605,15 +605,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const isError = data.status === 'error';
 
         if (answerStatusBadge) {
+            let modelBadge = '';
+            if (data.generator_info && data.generator_info.name) {
+                const icon = data.generator_info.is_cloud_llm ? 'fa-robot' : 'fa-brain';
+                modelBadge = ` <span class="badge-confidence" style="margin-left: 0.4rem; background: rgba(59, 130, 246, 0.15); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.35); font-size: 0.75rem;"><i class="fa-solid ${icon}"></i> ${escapeHtml(data.generator_info.name)}</span>`;
+            }
             if (isRefused) {
                 answerStatusBadge.className = 'badge-confidence refused';
-                answerStatusBadge.innerHTML = '<i class="fa-solid fa-ban"></i> Refused by Guardrails';
+                answerStatusBadge.innerHTML = '<i class="fa-solid fa-ban"></i> Refused by Guardrails' + modelBadge;
             } else if (isError) {
                 answerStatusBadge.className = 'badge-confidence refused';
-                answerStatusBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Pipeline Error';
+                answerStatusBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Pipeline Error' + modelBadge;
             } else {
                 answerStatusBadge.className = 'badge-confidence';
-                answerStatusBadge.innerHTML = '<i class="fa-solid fa-circle-check"></i> Grounded & Verified';
+                answerStatusBadge.innerHTML = '<i class="fa-solid fa-circle-check"></i> Grounded & Verified' + modelBadge;
             }
         }
 

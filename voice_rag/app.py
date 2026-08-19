@@ -4,7 +4,8 @@ FastAPI Backend Server for Voice-Enabled RAG Pipeline.
 Exposes REST endpoints for Web UI:
 - POST /api/query: Accepts text or audio questions, executes VoiceRAGHarness, returns response + audio.
 - GET /api/documents: Returns indexed MSMARCO-XI dataset passages.
-- GET /api/health: Returns system status.
+- GET /api/health: Returns system status, active LLM generator, and STT/TTS details.
+- GET /api/stats: Returns indexing and strategy statistics.
 - Serves static frontend from static/ directory.
 """
 from __future__ import annotations
@@ -18,7 +19,7 @@ from typing import Optional, List, Dict
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -32,7 +33,7 @@ from tts import SarvamTTS
 from generator import make_generator
 
 # Initialize FastAPI App
-app = FastAPI(title="Voice RAG API", version="1.0.0")
+app = FastAPI(title="Voice RAG API", version="2.0.0")
 
 # Enable CORS for browser access
 app.add_middleware(
@@ -52,7 +53,30 @@ STT = SarvamSTT()
 TTS = SarvamTTS()
 GENERATOR = make_generator()
 HARNESS = VoiceRAGHarness(retriever=RETRIEVER, stt=STT, tts=TTS, generator=GENERATOR)
-print(f"[server] Pipeline ready! Indexed {len(DOCS)} docs into {len(CHUNKS)} chunks. Generator: {GENERATOR.__class__.__name__}")
+
+
+def get_generator_info(gen=None) -> dict:
+    active_gen = gen or GENERATOR
+    cname = active_gen.__class__.__name__
+    name_map = {
+        "GroqGenerator": "Groq (Llama 3.3 70B)",
+        "GeminiGenerator": "Google Gemini 2.0 Flash",
+        "OpenAIGenerator": "OpenAI GPT-4o-mini",
+        "ClaudeGenerator": "Anthropic Claude 3.5",
+        "OpenRouterGenerator": "OpenRouter",
+        "OllamaGenerator": "Ollama (Local LLM)",
+        "SmartExtractiveGenerator": "Smart Extractive QA",
+        "ExtractiveFallbackGenerator": "Smart Extractive QA",
+    }
+    return {
+        "class": cname,
+        "name": name_map.get(cname, cname),
+        "is_cloud_llm": cname not in ("SmartExtractiveGenerator", "ExtractiveFallbackGenerator", "OllamaGenerator"),
+        "model": getattr(active_gen, "model", "extractive"),
+    }
+
+
+print(f"[server] Pipeline ready! Indexed {len(DOCS)} docs into {len(CHUNKS)} chunks. Active Generator: {get_generator_info()['name']}")
 
 
 class QueryRequest(BaseModel):
@@ -62,11 +86,17 @@ class QueryRequest(BaseModel):
 
 @app.get("/api/health")
 def health_check():
+    # Refresh generator if env vars were populated after cold start
+    current_gen = make_generator()
+    gen_info = get_generator_info(current_gen)
     return {
         "status": "ok",
         "docs_count": len(DOCS),
         "chunks_count": len(CHUNKS),
-        "generator_backend": GENERATOR.__class__.__name__,
+        "generator_backend": gen_info["name"],
+        "generator_class": gen_info["class"],
+        "generator_model": gen_info["model"],
+        "is_cloud_llm": gen_info["is_cloud_llm"],
         "stt_provider": getattr(STT, 'provider', 'sarvam'),
         "tts_speaker": getattr(TTS, 'speaker', 'anushka'),
         "top_k_default": HARNESS.top_k,
@@ -79,11 +109,13 @@ def get_stats():
     for c in CHUNKS:
         strat = getattr(c, "strategy", "unknown")
         strategies[strat] = strategies.get(strat, 0) + 1
+    gen_info = get_generator_info()
     return {
         "docs_count": len(DOCS),
         "chunks_count": len(CHUNKS),
         "strategies": strategies,
-        "generator": GENERATOR.__class__.__name__,
+        "generator": gen_info["name"],
+        "generator_class": gen_info["class"],
         "stt_provider": getattr(STT, 'provider', 'sarvam'),
         "tts_speaker": getattr(TTS, 'speaker', 'anushka'),
     }
@@ -93,8 +125,6 @@ def get_stats():
 def get_documents() -> List[Dict]:
     return DOCS
 
-
-from fastapi import Request
 
 @app.post("/api/query")
 async def process_query(request: Request):
@@ -140,6 +170,9 @@ async def process_query(request: Request):
                 tmp.write(audio_bytes)
                 temp_audio_path = tmp.name
 
+        # Ensure latest generator configuration
+        HARNESS.generator = make_generator()
+
         # Execute harness without blocking server playback (play_audio=False)
         resp = HARNESS.run(
             audio_path=temp_audio_path,
@@ -148,6 +181,10 @@ async def process_query(request: Request):
             top_k=top_k
         )
         resp_dict = resp.model_dump()
+
+        # Attach active generator metadata
+        gen_info = get_generator_info(HARNESS.generator)
+        resp_dict["generator_info"] = gen_info
 
         # Attach Base64 Audio if TTS audio was generated
         if resp.tts and resp.tts.audio_path and os.path.exists(resp.tts.audio_path):
@@ -167,8 +204,20 @@ async def process_query(request: Request):
                 pass
 
 
-# Ensure static directory exists
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+# Static directory resolution for local and Vercel environments
+_STATIC_CANDIDATES = [
+    os.path.join(os.path.dirname(__file__), "static"),
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "voice_rag", "static"),
+    os.path.join(os.getcwd(), "voice_rag", "static"),
+    os.path.join(os.getcwd(), "static"),
+]
+
+STATIC_DIR = _STATIC_CANDIDATES[0]
+for d in _STATIC_CANDIDATES:
+    if os.path.isdir(d):
+        STATIC_DIR = d
+        break
+
 os.makedirs(STATIC_DIR, exist_ok=True)
 
 # Serve Frontend static files
