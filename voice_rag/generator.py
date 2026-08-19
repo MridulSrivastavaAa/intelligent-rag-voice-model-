@@ -27,12 +27,13 @@ from schema import RetrievalResult, GeneratedAnswer
 from chunking import split_sentences
 
 SYSTEM_PROMPT = (
-    "You are a grounded question-answering assistant. You MUST answer only "
-    "using the provided context chunks. If the context does not contain the "
-    "answer, set abstain=true and explain briefly why. Always cite the "
-    "chunk_id(s) you used. Respond with ONLY a JSON object of the form: "
+    "You are an expert grounded question-answering assistant. You MUST answer accurately "
+    "using ONLY the provided context chunks. Answer in the EXACT SAME LANGUAGE as the user's question "
+    "(if Hindi question, answer in Hindi; if English question, answer in English). "
+    "Be concise, clear, and direct. If the context does not contain the answer, set abstain=true. "
+    "Always cite the chunk_id(s) you used. Respond ONLY with a valid JSON object of the form: "
     '{"answer": "...", "citations": ["chunk_id", ...], "abstain": false} '
-    "with no other text, no markdown fences."
+    "with no other text and no markdown backticks."
 )
 
 
@@ -592,9 +593,11 @@ class OllamaGenerator(BaseLLMGenerator):
                 latency_ms = (time.perf_counter() - t0) * 1000
                 raw_cits = parsed.get("citations", [])
                 cits = [clean_citation_id(c) for c in raw_cits if clean_citation_id(c)]
+                if not cits and retrieval.retrieved:
+                    cits = [retrieval.retrieved[0].chunk.chunk_id]
 
                 return GeneratedAnswer(
-                    answer_text=parsed.get("answer", ""),
+                    answer_text=parsed.get("answer", "").strip(),
                     citations=cits,
                     grounded=not parsed.get("abstain", False),
                     abstained=bool(parsed.get("abstain", False)),

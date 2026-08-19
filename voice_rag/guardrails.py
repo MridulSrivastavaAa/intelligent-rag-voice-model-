@@ -15,7 +15,7 @@ from typing import List
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from schema import GuardrailVerdict, RetrievalResult, GeneratedAnswer
-from retrieval import _tokenize as _content_tokenize
+from retrieval import _tokenize as _content_tokenize, _expand_query
 
 UNSAFE_PATTERNS = [
     r"\b(make|build|construct|assemble)\b.{0,30}\bbomb\b",
@@ -28,7 +28,7 @@ UNSAFE_PATTERNS = [
     r"\bhack (into|someone'?s)\b.*\baccount\b",
 ]
 
-OFF_TOPIC_RETRIEVAL_THRESHOLD = 0.05
+OFF_TOPIC_RETRIEVAL_THRESHOLD = 0.01
 
 
 class InputGuardrail:
@@ -59,22 +59,23 @@ class InputGuardrail:
 
         if retrieval.retrieved:
             combined_ctx = " ".join([
-                (rc.chunk.parent_text or rc.chunk.text) for rc in retrieval.retrieved[:3]
+                (rc.chunk.parent_text or rc.chunk.text) for rc in retrieval.retrieved
             ])
             q_terms = set(_content_tokenize(retrieval.query))
+            expanded_terms = set(_content_tokenize(_expand_query(retrieval.query)))
             ctx_terms = set(_content_tokenize(combined_ctx))
 
             if q_terms:
-                matched_terms = q_terms & ctx_terms
+                matched_terms = (q_terms & ctx_terms) | (expanded_terms & ctx_terms)
                 overlap_count = len(matched_terms)
-                overlap_ratio = overlap_count / len(q_terms)
+                overlap_ratio = overlap_count / max(len(q_terms), 1)
 
-                if retrieval.max_score >= 0.40:
+                if retrieval.max_score >= 0.05 or overlap_count > 0:
                     overlap_ok = True
                 elif len(q_terms) <= 2:
                     overlap_ok = overlap_count >= 1
                 else:
-                    overlap_ok = (overlap_count >= 2) and (overlap_ratio >= 0.25)
+                    overlap_ok = (overlap_count >= 1) and (overlap_ratio >= 0.20)
 
         is_on_topic = score_ok and overlap_ok
         reasons = []
