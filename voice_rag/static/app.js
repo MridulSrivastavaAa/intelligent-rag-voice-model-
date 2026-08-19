@@ -1,10 +1,12 @@
 /**
- * VoiceRAG Flora • Complete Modern Application Controller
- * High-performance, resilient, and rich interactive logic.
+ * VoiceRAG Flora • Modern Application Controller
+ * High-performance, resilient, and rich interactive voice-RAG pipeline UI.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-    // --- DOM Elements ---
+    // =========================================================================
+    // DOM Elements Mapping
+    // =========================================================================
     const brandHome = document.getElementById('brand-home');
     const systemStatusDot = document.getElementById('system-status-dot');
     const backendInfo = document.getElementById('backend-info');
@@ -42,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const playPauseBtn = document.getElementById('play-pause-btn');
     const audioPlayIcon = document.getElementById('audio-play-icon');
     const audioSpeakerLabel = document.getElementById('audio-speaker-label');
+    const audioTimeLabel = document.getElementById('audio-time-label');
     const audioLatencyLabel = document.getElementById('audio-latency-label');
     const audioSeeker = document.getElementById('audio-seeker');
     const audioSpeedBtn = document.getElementById('audio-speed-btn');
@@ -74,7 +77,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const toastContainer = document.getElementById('toast-container');
 
-    // --- State Variables ---
+    // =========================================================================
+    // State Variables
+    // =========================================================================
     let isRecording = false;
     let mediaRecorder = null;
     let recordedAudioChunks = [];
@@ -85,16 +90,20 @@ document.addEventListener('DOMContentLoaded', () => {
     let recordStartTime = 0;
     let recordTimerInterval = null;
     let speechRecognition = null;
-    let playbackSpeeds = [1.0, 1.25, 1.5, 2.0];
+    let isSeeking = false;
+    const playbackSpeeds = [1.0, 1.25, 1.5, 2.0];
     let currentSpeedIndex = 0;
     let allDocuments = [];
     let queryHistory = JSON.parse(localStorage.getItem('voicerag_history') || '[]');
 
-    // --- Initialize Application ---
+    // =========================================================================
+    // Initialization
+    // =========================================================================
     initTheme();
     fetchSystemHealth();
     initIdleVisualizer();
     renderHistory();
+    setupKeyboardShortcuts();
 
     // =========================================================================
     // Theme Switcher (Dark / Light)
@@ -105,16 +114,19 @@ document.addEventListener('DOMContentLoaded', () => {
         updateThemeIcon(savedTheme);
     }
 
-    themeToggleBtn.addEventListener('click', () => {
-        const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
-        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-        document.documentElement.setAttribute('data-theme', newTheme);
-        localStorage.setItem('voicerag_theme', newTheme);
-        updateThemeIcon(newTheme);
-        showToast(`Switched to ${newTheme} mode`, 'info');
-    });
+    if (themeToggleBtn) {
+        themeToggleBtn.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('voicerag_theme', newTheme);
+            updateThemeIcon(newTheme);
+            showToast(`Switched to ${newTheme} mode`, 'info');
+        });
+    }
 
     function updateThemeIcon(theme) {
+        if (!themeIcon) return;
         if (theme === 'dark') {
             themeIcon.className = 'fa-solid fa-sun';
             themeToggleBtn.title = 'Switch to Light Mode';
@@ -133,7 +145,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (res.ok) {
                 const data = await res.json();
                 systemStatusDot.classList.remove('offline');
-                backendInfo.innerHTML = `Online • <strong>${data.generator_backend || 'Ready'}</strong> (${data.docs_count || 0} docs, ${data.chunks_count || 0} chunks)`;
+                const backend = data.generator_backend || 'Pipeline Ready';
+                const docs = data.docs_count || 0;
+                const chunks = data.chunks_count || 0;
+                backendInfo.innerHTML = `Online • <strong>${escapeHtml(backend)}</strong> (${docs} docs, ${chunks} chunks)`;
             } else {
                 setBackendOffline();
             }
@@ -147,13 +162,13 @@ document.addEventListener('DOMContentLoaded', () => {
         backendInfo.textContent = 'Backend Offline / Reconnecting...';
     }
 
-    // Periodic health check every 15 seconds
     setInterval(fetchSystemHealth, 15000);
 
     // =========================================================================
     // Toast Notification System
     // =========================================================================
     function showToast(message, type = 'info', duration = 3500) {
+        if (!toastContainer) return;
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
         let icon = 'fa-circle-info';
@@ -175,6 +190,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // =========================================================================
+    // Keyboard Shortcuts
+    // =========================================================================
+    function setupKeyboardShortcuts() {
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (docsModal && docsModal.style.display === 'flex') {
+                    docsModal.style.display = 'none';
+                }
+                if (historyDrawer && historyDrawer.classList.contains('open')) {
+                    historyDrawer.classList.remove('open');
+                }
+            }
+            if ((e.key === '/' || (e.ctrlKey && e.key.toLowerCase() === 'k')) && document.activeElement !== queryInput && document.activeElement !== docSearchInput) {
+                e.preventDefault();
+                queryInput.focus();
+                queryInput.select();
+            }
+        });
+    }
+
+    // =========================================================================
     // Input Handling & Presets
     // =========================================================================
     queryInput.addEventListener('input', () => {
@@ -187,17 +223,19 @@ document.addEventListener('DOMContentLoaded', () => {
         queryInput.focus();
     });
 
-    presetsGrid.addEventListener('click', (e) => {
-        const chip = e.target.closest('.preset-chip');
-        if (chip) {
-            const query = chip.getAttribute('data-query');
-            if (query) {
-                queryInput.value = query;
-                clearInputBtn.style.display = 'flex';
-                handleTextQuerySubmit(query);
+    if (presetsGrid) {
+        presetsGrid.addEventListener('click', (e) => {
+            const chip = e.target.closest('.preset-chip');
+            if (chip) {
+                const query = chip.getAttribute('data-query');
+                if (query) {
+                    queryInput.value = query;
+                    clearInputBtn.style.display = 'flex';
+                    handleTextQuerySubmit(query);
+                }
             }
-        }
-    });
+        });
+    }
 
     searchForm.addEventListener('submit', (e) => {
         e.preventDefault();
@@ -207,31 +245,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    brandHome.addEventListener('click', () => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
+    if (brandHome) {
+        brandHome.addEventListener('click', () => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    }
 
     // =========================================================================
     // Audio File Upload Handling
     // =========================================================================
-    uploadAudioBtn.addEventListener('click', () => {
-        audioFileInput.click();
-    });
+    if (uploadAudioBtn && audioFileInput) {
+        uploadAudioBtn.addEventListener('click', () => {
+            audioFileInput.click();
+        });
 
-    audioFileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+        audioFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
 
-        showToast(`Selected audio file: ${file.name}`, 'info');
-        handleAudioFileUpload(file);
-        audioFileInput.value = '';
-    });
+            showToast(`Selected audio file: ${file.name}`, 'info');
+            handleAudioFileUpload(file);
+            audioFileInput.value = '';
+        });
+    }
 
     async function handleAudioFileUpload(file) {
         setLoading(true, 'Uploading and transcribing audio with Sarvam AI...');
         const formData = new FormData();
         formData.append('audio', file, file.name);
-        formData.append('top_k', topkSelect.value);
+        formData.append('top_k', topkSelect ? topkSelect.value : '4');
 
         await executeQueryRequest(formData);
     }
@@ -239,7 +281,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================================
     // Microphone Recording & Universal Web Audio
     // =========================================================================
-    micBtn.addEventListener('click', toggleRecording);
+    if (micBtn) {
+        micBtn.addEventListener('click', toggleRecording);
+    }
 
     async function toggleRecording() {
         if (!isRecording) {
@@ -264,18 +308,25 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             // Find best supported MIME type
-            let mimeType = 'audio/webm';
-            if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-                mimeType = 'audio/webm;codecs=opus';
-            } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-                mimeType = 'audio/mp4';
-            } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
-                mimeType = 'audio/ogg';
-            } else if (MediaRecorder.isTypeSupported('audio/wav')) {
-                mimeType = 'audio/wav';
+            let options = {};
+            const testTypes = [
+                'audio/webm;codecs=opus',
+                'audio/webm',
+                'audio/ogg;codecs=opus',
+                'audio/mp4',
+                'audio/wav'
+            ];
+
+            if (window.MediaRecorder && typeof MediaRecorder.isTypeSupported === 'function') {
+                for (const t of testTypes) {
+                    if (MediaRecorder.isTypeSupported(t)) {
+                        options = { mimeType: t };
+                        break;
+                    }
+                }
             }
 
-            mediaRecorder = new MediaRecorder(audioStream, { mimeType });
+            mediaRecorder = options.mimeType ? new MediaRecorder(audioStream, options) : new MediaRecorder(audioStream);
             recordedAudioChunks = [];
 
             mediaRecorder.ondataavailable = (e) => {
@@ -285,7 +336,8 @@ document.addEventListener('DOMContentLoaded', () => {
             };
 
             mediaRecorder.onstop = async () => {
-                const audioBlob = new Blob(recordedAudioChunks, { type: mimeType });
+                const actualMime = mediaRecorder.mimeType || 'audio/webm';
+                const audioBlob = new Blob(recordedAudioChunks, { type: actualMime });
                 cleanupAudioStream();
 
                 if (audioBlob.size < 200) {
@@ -294,11 +346,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                const ext = mimeType.includes('webm') ? 'webm' : (mimeType.includes('mp4') ? 'm4a' : 'wav');
+                let ext = 'wav';
+                if (actualMime.includes('webm')) ext = 'webm';
+                else if (actualMime.includes('mp4') || actualMime.includes('m4a')) ext = 'm4a';
+                else if (actualMime.includes('ogg')) ext = 'ogg';
+
                 const formData = new FormData();
                 formData.append('audio', audioBlob, `speech_query.${ext}`);
-                formData.append('top_k', topkSelect.value);
-                
+                formData.append('top_k', topkSelect ? topkSelect.value : '4');
+
                 // If Web Speech API captured live text, also attach it as hint
                 if (queryInput.value.trim()) {
                     formData.append('text', queryInput.value.trim());
@@ -308,16 +364,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 await executeQueryRequest(formData);
             };
 
-            mediaRecorder.start(250); // capture in chunks
+            mediaRecorder.start(250);
             isRecording = true;
 
             // Update UI
             micBtn.classList.remove('speaking', 'processing');
             micBtn.classList.add('recording');
-            micIcon.className = 'fa-solid fa-stop';
-            voiceStatusPill.classList.add('recording');
-            recordingStatus.textContent = 'Listening to your voice... Click orb to finish';
-            recordTimer.style.display = 'inline-block';
+            if (micIcon) micIcon.className = 'fa-solid fa-stop';
+            if (voiceStatusPill) voiceStatusPill.classList.add('recording');
+            if (recordingStatus) recordingStatus.textContent = 'Listening to your voice... Click orb to finish';
+            if (recordTimer) recordTimer.style.display = 'inline-block';
 
             // Start Timer (Max 15 seconds)
             recordStartTime = Date.now();
@@ -353,7 +409,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         if (speechRecognition) {
-            try { speechRecognition.stop(); } catch(e){}
+            try { speechRecognition.stop(); } catch (e) {}
         }
         cleanupRecordingUI();
     }
@@ -361,11 +417,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function cleanupRecordingUI() {
         isRecording = false;
         if (recordTimerInterval) clearInterval(recordTimerInterval);
-        micBtn.classList.remove('recording');
-        micIcon.className = 'fa-solid fa-microphone';
-        voiceStatusPill.classList.remove('recording');
-        recordTimer.style.display = 'none';
-        recordingStatus.textContent = 'Processing request...';
+        if (micBtn) {
+            micBtn.classList.remove('recording');
+            if (micIcon) micIcon.className = 'fa-solid fa-microphone';
+        }
+        if (voiceStatusPill) voiceStatusPill.classList.remove('recording');
+        if (recordTimer) recordTimer.style.display = 'none';
+        if (recordingStatus) recordingStatus.textContent = 'Processing request...';
     }
 
     function cleanupAudioStream() {
@@ -378,6 +436,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateTimerDisplay() {
+        if (!recordTimer) return;
         const totalSeconds = Math.floor((Date.now() - recordStartTime) / 1000);
         const mins = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
         const secs = String(totalSeconds % 60).padStart(2, '0');
@@ -393,8 +452,9 @@ document.addEventListener('DOMContentLoaded', () => {
             speechRecognition = new SpeechRec();
             speechRecognition.continuous = true;
             speechRecognition.interimResults = true;
-            
-            const langCode = languageSelect.value === 'auto' ? 'hi-IN' : languageSelect.value;
+
+            const selectedLang = languageSelect ? languageSelect.value : 'auto';
+            const langCode = selectedLang === 'auto' ? 'hi-IN' : selectedLang;
             speechRecognition.lang = langCode;
 
             speechRecognition.onresult = (event) => {
@@ -404,14 +464,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 if (liveTranscript.trim()) {
                     queryInput.value = liveTranscript;
-                    clearInputBtn.style.display = 'flex';
+                    if (clearInputBtn) clearInputBtn.style.display = 'flex';
                 }
             };
 
             speechRecognition.onerror = () => {};
             speechRecognition.start();
         } catch (e) {
-            // Non-fatal, MediaRecorder will still capture raw audio
+            // Non-fatal fallback
         }
     }
 
@@ -420,7 +480,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================================
     function startLiveVisualizer(stream) {
         if (visualizerAnimId) cancelAnimationFrame(visualizerAnimId);
-        
+
         try {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             const source = audioCtx.createMediaStreamSource(stream);
@@ -449,7 +509,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     gradient.addColorStop(1, '#06b6d4');
 
                     ctx.fillStyle = gradient;
-                    ctx.fillRect(x, waveCanvas.height - barHeight, barWidth - 3, barHeight);
+                    ctx.fillRect(x, waveCanvas.height - barHeight, Math.max(1, barWidth - 3), barHeight);
                     x += barWidth;
                 }
             }
@@ -461,12 +521,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function initIdleVisualizer() {
+        if (!waveCanvas) return;
         const ctx = waveCanvas.getContext('2d');
         waveCanvas.width = waveCanvas.offsetWidth * window.devicePixelRatio;
         waveCanvas.height = waveCanvas.offsetHeight * window.devicePixelRatio;
         ctx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
 
-        // Draw a gentle ambient sinusoidal baseline
+        // Draw gentle ambient sinusoidal baseline
         ctx.beginPath();
         ctx.moveTo(0, waveCanvas.height / 2);
         for (let x = 0; x < waveCanvas.width; x += 5) {
@@ -489,14 +550,13 @@ document.addEventListener('DOMContentLoaded', () => {
         setLoading(true, 'Executing hybrid retrieval & grounded generation...');
         const payload = {
             text: text,
-            top_k: parseInt(topkSelect.value, 10) || 4
+            top_k: parseInt(topkSelect ? topkSelect.value : '4', 10) || 4
         };
 
         await executeQueryRequest(payload);
     }
 
     async function executeQueryRequest(payload) {
-        const startTime = Date.now();
         try {
             let res;
             if (payload instanceof FormData) {
@@ -536,44 +596,52 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================================
     function renderResponse(data) {
         // Show Answer Card
-        answerCard.style.display = 'block';
-        answerCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        if (answerCard) {
+            answerCard.style.display = 'block';
+            answerCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
 
         const isRefused = data.status === 'refused';
         const isError = data.status === 'error';
 
-        if (isRefused) {
-            answerStatusBadge.className = 'badge-confidence refused';
-            answerStatusBadge.innerHTML = '<i class="fa-solid fa-ban"></i> Refused by Guardrails';
-        } else if (isError) {
-            answerStatusBadge.className = 'badge-confidence refused';
-            answerStatusBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Pipeline Error';
-        } else {
-            answerStatusBadge.className = 'badge-confidence';
-            answerStatusBadge.innerHTML = '<i class="fa-solid fa-shield-check"></i> Grounded & Verified';
+        if (answerStatusBadge) {
+            if (isRefused) {
+                answerStatusBadge.className = 'badge-confidence refused';
+                answerStatusBadge.innerHTML = '<i class="fa-solid fa-ban"></i> Refused by Guardrails';
+            } else if (isError) {
+                answerStatusBadge.className = 'badge-confidence refused';
+                answerStatusBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Pipeline Error';
+            } else {
+                answerStatusBadge.className = 'badge-confidence';
+                answerStatusBadge.innerHTML = '<i class="fa-solid fa-circle-check"></i> Grounded & Verified';
+            }
         }
 
-        // Render Answer Text with formatted citations
-        if (data.answer && data.answer.answer_text) {
-            answerText.innerHTML = formatAnswerText(data.answer.answer_text);
-        } else {
-            const reason = data.error || (data.input_guardrail && data.input_guardrail.reasons.join(', ')) || 'Query refused by safety guardrails.';
-            answerText.innerHTML = `<span style="color: var(--accent-rose); font-weight: 600;"><i class="fa-solid fa-circle-exclamation"></i> Notice:</span> ${escapeHtml(reason)}`;
+        // Render Answer Text with formatted markdown & interactive citations
+        if (answerText) {
+            if (data.answer && data.answer.answer_text) {
+                answerText.innerHTML = formatAnswerMarkdown(data.answer.answer_text);
+            } else {
+                const reason = data.error || (data.input_guardrail && data.input_guardrail.reasons ? data.input_guardrail.reasons.join(', ') : '') || 'Query refused by safety guardrails.';
+                answerText.innerHTML = `<span style="color: var(--accent-rose); font-weight: 600;"><i class="fa-solid fa-circle-exclamation"></i> Notice:</span> ${escapeHtml(reason)}`;
+            }
         }
 
         // Render Citations
-        citationsList.innerHTML = '';
-        if (data.answer && data.answer.citations && data.answer.citations.length > 0) {
-            data.answer.citations.forEach(c => {
-                const pill = document.createElement('span');
-                pill.className = 'citation-pill';
-                pill.textContent = c;
-                pill.title = `Click to view source passage [${c}]`;
-                pill.addEventListener('click', () => highlightPassage(c));
-                citationsList.appendChild(pill);
-            });
-        } else {
-            citationsList.innerHTML = `<span style="font-size: 0.8rem; color: var(--text-dim);">${isRefused ? 'None (Refused)' : 'Direct Answer'}</span>`;
+        if (citationsList) {
+            citationsList.innerHTML = '';
+            if (data.answer && data.answer.citations && data.answer.citations.length > 0) {
+                data.answer.citations.forEach(c => {
+                    const pill = document.createElement('span');
+                    pill.className = 'citation-pill';
+                    pill.textContent = `[${c}]`;
+                    pill.title = `Click to view source passage [${c}]`;
+                    pill.addEventListener('click', () => highlightPassage(c));
+                    citationsList.appendChild(pill);
+                });
+            } else {
+                citationsList.innerHTML = `<span style="font-size: 0.8rem; color: var(--text-dim);">${isRefused ? 'None (Refused)' : 'Direct Answer'}</span>`;
+            }
         }
 
         // Setup Spoken Audio (Sarvam TTS or Browser Web Speech)
@@ -589,28 +657,85 @@ document.addEventListener('DOMContentLoaded', () => {
         renderPassages(data.retrieval);
     }
 
-    function formatAnswerText(text) {
-        let safe = escapeHtml(text);
-        // Replace citations like [d001_s0] or [d001] with clickable links
-        safe = safe.replace(/\[([a-zA-Z0-9_\-]+)\]/g, (match, chunkId) => {
-            return `<span class="citation-pill" onclick="window.highlightPassage('${chunkId}')">${match}</span>`;
+    // Markdown Parser with Interactive Citation Linking
+    function formatAnswerMarkdown(raw) {
+        if (!raw) return '';
+        let safe = escapeHtml(raw);
+
+        // Parse Code Blocks ```code```
+        safe = safe.replace(/```([\s\S]*?)```/g, (m, code) => `<pre><code>${code}</code></pre>`);
+        // Parse Inline Code `code`
+        safe = safe.replace(/`([^`]+)`/g, (m, code) => `<code>${code}</code>`);
+
+        // Parse Bold **text**
+        safe = safe.replace(/\*\*([^*]+)\*\*/g, (m, bold) => `<strong>${bold}</strong>`);
+        // Parse Italic *text*
+        safe = safe.replace(/\*([^*]+)\*/g, (m, italic) => `<em>${italic}</em>`);
+
+        // Replace citations like [d001_s0] or [d001_s0, d002_s1] with interactive badges
+        safe = safe.replace(/\[([a-zA-Z0-9_\-,\s]+)\]/g, (match, inner) => {
+            const ids = inner.split(',').map(s => s.trim()).filter(Boolean);
+            if (ids.length === 0) return match;
+            return ids.map(id => `<span class="citation-pill" onclick="window.highlightPassage('${escapeHtml(id)}')">[${escapeHtml(id)}]</span>`).join(' ');
         });
-        return safe;
+
+        // Split paragraphs on double newlines
+        const paragraphs = safe.split(/\n\s*\n/);
+        return paragraphs.map(p => {
+            const lines = p.split('\n');
+            const formattedLines = lines.map(line => {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+                    return `<li>${trimmed.substring(2)}</li>`;
+                }
+                if (/^\d+\.\s/.test(trimmed)) {
+                    return `<li>${trimmed.replace(/^\d+\.\s/, '')}</li>`;
+                }
+                return line;
+            });
+
+            // Check if this paragraph contains list items
+            const hasList = formattedLines.some(l => l.startsWith('<li>'));
+            if (hasList) {
+                return `<ul>${formattedLines.join('')}</ul>`;
+            }
+            return `<p>${formattedLines.join('<br>')}</p>`;
+        }).join('');
     }
 
-    // Expose highlightPassage to window for citation click
+    // Expose highlightPassage globally for citation clicks
     window.highlightPassage = highlightPassage;
 
     function highlightPassage(chunkId) {
-        const cleanId = chunkId.replace(/[\[\]]/g, '').trim();
-        const passageEl = document.getElementById(`chunk-${cleanId}`);
+        const cleanId = String(chunkId).replace(/[\[\]]/g, '').trim();
+        if (!cleanId) return;
+
+        // Try exact ID match first
+        let passageEl = document.getElementById(`chunk-${cleanId}`);
+
+        // Fallback: substring / prefix match
+        if (!passageEl) {
+            passageEl = document.querySelector(`[id*="${cleanId}"]`) ||
+                        document.querySelector(`[data-doc-id="${cleanId}"]`);
+        }
+
         if (passageEl) {
+            // If inside collapsed details accordion, open it
+            const details = passageEl.querySelector('details.parent-context-accordion');
+            if (details) {
+                details.open = true;
+            }
+
             passageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            passageEl.classList.remove('highlighted');
+            // Trigger reflow for re-animation
+            void passageEl.offsetWidth;
             passageEl.classList.add('highlighted');
-            setTimeout(() => passageEl.classList.remove('highlighted'), 2500);
+
+            setTimeout(() => passageEl.classList.remove('highlighted'), 3000);
             showToast(`Jumped to source passage [${cleanId}]`, 'info', 2000);
         } else {
-            showToast(`Source chunk [${cleanId}] retrieved in top context`, 'info');
+            showToast(`Source passage [${cleanId}] referenced in answer`, 'info', 2000);
         }
     }
 
@@ -620,24 +745,34 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupAudioReply(data) {
         const hasAudioBase64 = data.audio_base64 && data.audio_base64.length > 50;
 
-        if (hasAudioBase64) {
+        if (hasAudioBase64 && audioPlayerBar && audioElement) {
             audioPlayerBar.style.display = 'flex';
             audioElement.src = `data:audio/wav;base64,${data.audio_base64}`;
-            
-            if (data.tts) {
-                audioSpeakerLabel.innerHTML = `<i class="fa-solid fa-volume-high"></i> Sarvam Voice (${data.tts.speaker || 'Anushka'})`;
+
+            if (audioSpeakerLabel && data.tts) {
+                audioSpeakerLabel.innerHTML = `<i class="fa-solid fa-wave-square"></i> Sarvam Voice (${data.tts.speaker || 'Anushka'})`;
+            }
+            if (audioLatencyLabel && data.tts) {
                 audioLatencyLabel.textContent = `${data.tts.latency_ms.toFixed(1)} ms`;
             }
 
-            downloadAudioBtn.style.display = 'inline-flex';
-            downloadAudioBtn.href = audioElement.src;
+            if (downloadAudioBtn) {
+                downloadAudioBtn.style.display = 'inline-flex';
+                downloadAudioBtn.href = audioElement.src;
+            }
+
+            if (audioTimeLabel) {
+                audioTimeLabel.textContent = '0:00 / 0:00';
+            }
+            if (audioSeeker) {
+                audioSeeker.value = 0;
+            }
 
             // Auto-play if enabled
-            if (autoSpeakToggle.checked) {
+            if (autoSpeakToggle && autoSpeakToggle.checked) {
                 audioElement.play().then(() => {
                     updatePlayState(true);
                 }).catch(() => {
-                    // Browser policy blocked autoplay without gesture
                     updatePlayState(false);
                 });
             } else {
@@ -645,66 +780,106 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
         } else {
-            audioPlayerBar.style.display = 'none';
-            // If answer is valid and user requested auto-play, fallback to browser speech synthesis
-            if (autoSpeakToggle.checked && data.answer && data.answer.answer_text && data.status === 'ok') {
+            if (audioPlayerBar) audioPlayerBar.style.display = 'none';
+            // Fallback to browser speech synthesis if answer is valid & auto-play checked
+            if (autoSpeakToggle && autoSpeakToggle.checked && data.answer && data.answer.answer_text && data.status === 'ok') {
                 speakViaBrowser(data.answer.answer_text);
             }
         }
     }
 
+    // Helper: format seconds to M:SS
+    function formatTime(seconds) {
+        if (isNaN(seconds) || !isFinite(seconds) || seconds < 0) return '0:00';
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    }
+
     // Audio Play / Pause Events
-    playPauseBtn.addEventListener('click', () => {
-        if (!audioElement.src) return;
-        if (audioElement.paused) {
-            audioElement.play();
-            updatePlayState(true);
-        } else {
-            audioElement.pause();
+    if (playPauseBtn && audioElement) {
+        playPauseBtn.addEventListener('click', () => {
+            if (!audioElement.src) return;
+            if (audioElement.paused) {
+                audioElement.play().then(() => updatePlayState(true)).catch(() => updatePlayState(false));
+            } else {
+                audioElement.pause();
+                updatePlayState(false);
+            }
+        });
+
+        audioElement.addEventListener('ended', () => {
             updatePlayState(false);
-        }
-    });
+            if (audioSeeker) audioSeeker.value = 0;
+            if (audioTimeLabel) audioTimeLabel.textContent = `0:00 / ${formatTime(audioElement.duration)}`;
+        });
 
-    audioElement.addEventListener('ended', () => {
-        updatePlayState(false);
-        audioSeeker.value = 0;
-    });
+        audioElement.addEventListener('loadedmetadata', () => {
+            if (audioTimeLabel) {
+                audioTimeLabel.textContent = `${formatTime(audioElement.currentTime)} / ${formatTime(audioElement.duration)}`;
+            }
+        });
 
-    audioElement.addEventListener('timeupdate', () => {
-        if (audioElement.duration) {
-            const pct = (audioElement.currentTime / audioElement.duration) * 100;
-            audioSeeker.value = pct;
-        }
-    });
+        audioElement.addEventListener('timeupdate', () => {
+            if (audioElement.duration && !isSeeking) {
+                const pct = (audioElement.currentTime / audioElement.duration) * 100;
+                if (audioSeeker) audioSeeker.value = pct;
+                if (audioTimeLabel) {
+                    audioTimeLabel.textContent = `${formatTime(audioElement.currentTime)} / ${formatTime(audioElement.duration)}`;
+                }
+            }
+        });
+    }
 
-    audioSeeker.addEventListener('input', () => {
-        if (audioElement.duration) {
-            audioElement.currentTime = (audioSeeker.value / 100) * audioElement.duration;
-        }
-    });
+    // Smooth Seeking Controls
+    if (audioSeeker && audioElement) {
+        const startSeek = () => { isSeeking = true; };
+        const endSeek = () => {
+            if (audioElement.duration) {
+                audioElement.currentTime = (audioSeeker.value / 100) * audioElement.duration;
+            }
+            isSeeking = false;
+        };
 
-    audioSpeedBtn.addEventListener('click', () => {
-        currentSpeedIndex = (currentSpeedIndex + 1) % playbackSpeeds.length;
-        const speed = playbackSpeeds[currentSpeedIndex];
-        audioElement.playbackRate = speed;
-        audioSpeedBtn.textContent = `${speed.toFixed(1)}x`;
-    });
+        audioSeeker.addEventListener('mousedown', startSeek);
+        audioSeeker.addEventListener('touchstart', startSeek, { passive: true });
+        audioSeeker.addEventListener('input', () => {
+            if (audioElement.duration && audioTimeLabel) {
+                const cur = (audioSeeker.value / 100) * audioElement.duration;
+                audioTimeLabel.textContent = `${formatTime(cur)} / ${formatTime(audioElement.duration)}`;
+            }
+        });
+        audioSeeker.addEventListener('change', endSeek);
+        audioSeeker.addEventListener('mouseup', endSeek);
+        audioSeeker.addEventListener('touchend', endSeek);
+    }
+
+    if (audioSpeedBtn && audioElement) {
+        audioSpeedBtn.addEventListener('click', () => {
+            currentSpeedIndex = (currentSpeedIndex + 1) % playbackSpeeds.length;
+            const speed = playbackSpeeds[currentSpeedIndex];
+            audioElement.playbackRate = speed;
+            audioSpeedBtn.textContent = `${speed.toFixed(1)}x`;
+        });
+    }
 
     function updatePlayState(playing) {
-        if (playing) {
-            audioPlayIcon.className = 'fa-solid fa-pause';
-            micBtn.classList.add('speaking');
-        } else {
-            audioPlayIcon.className = 'fa-solid fa-play';
-            micBtn.classList.remove('speaking');
+        if (audioPlayIcon) {
+            audioPlayIcon.className = playing ? 'fa-solid fa-pause' : 'fa-solid fa-play';
+        }
+        if (micBtn) {
+            if (playing) micBtn.classList.add('speaking');
+            else micBtn.classList.remove('speaking');
         }
     }
 
     // Browser Speech Synthesis Fallback
-    speakBrowserBtn.addEventListener('click', () => {
-        const text = answerText.innerText;
-        if (text) speakViaBrowser(text);
-    });
+    if (speakBrowserBtn && answerText) {
+        speakBrowserBtn.addEventListener('click', () => {
+            const text = answerText.innerText;
+            if (text) speakViaBrowser(text);
+        });
+    }
 
     function speakViaBrowser(text) {
         if (!window.speechSynthesis) {
@@ -713,15 +888,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         window.speechSynthesis.cancel();
-        const cleanText = text.replace(/\[.*?\]/g, ''); // strip chunk references for reading
+        const cleanText = text.replace(/\[.*?\]/g, '');
         const utterance = new SpeechSynthesisUtterance(cleanText);
-        
-        // Find best Indian English or Hindi voice
+
         const voices = window.speechSynthesis.getVoices();
         const hindiVoice = voices.find(v => v.lang.includes('hi') || v.name.includes('Hindi'));
         const indianVoice = voices.find(v => v.lang.includes('en-IN') || v.name.includes('India'));
 
-        if (languageSelect.value.startsWith('hi') && hindiVoice) {
+        if (languageSelect && languageSelect.value.startsWith('hi') && hindiVoice) {
             utterance.voice = hindiVoice;
             utterance.lang = 'hi-IN';
         } else if (indianVoice) {
@@ -731,36 +905,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
         utterance.rate = 1.0;
         utterance.onstart = () => {
-            micBtn.classList.add('speaking');
+            if (micBtn) micBtn.classList.add('speaking');
             showToast('Speaking answer out loud...', 'info', 2000);
         };
-        utterance.onend = () => micBtn.classList.remove('speaking');
-        utterance.onerror = () => micBtn.classList.remove('speaking');
+        utterance.onend = () => { if (micBtn) micBtn.classList.remove('speaking'); };
+        utterance.onerror = () => { if (micBtn) micBtn.classList.remove('speaking'); };
 
         window.speechSynthesis.speak(utterance);
     }
 
     // Copy to Clipboard
-    copyAnswerBtn.addEventListener('click', async () => {
-        const text = answerText.innerText;
-        if (!text) return;
-        try {
-            await navigator.clipboard.writeText(text);
-            showToast('Answer copied to clipboard!', 'success');
-        } catch (e) {
-            showToast('Failed to copy to clipboard', 'error');
-        }
-    });
+    if (copyAnswerBtn && answerText) {
+        copyAnswerBtn.addEventListener('click', async () => {
+            const text = answerText.innerText;
+            if (!text) return;
+            try {
+                await navigator.clipboard.writeText(text);
+                showToast('Answer copied to clipboard!', 'success');
+            } catch (e) {
+                showToast('Failed to copy to clipboard', 'error');
+            }
+        });
+    }
 
     // =========================================================================
     // Guardrail Verdicts Visualizer
     // =========================================================================
     function renderGuardrails(data) {
+        if (!guardrailsCard || !guardrailBadgesGrid) return;
         guardrailsCard.style.display = 'block';
         guardrailBadgesGrid.innerHTML = '';
 
         const inputGuard = data.input_guardrail;
-        const outputGuard = data.output_guardrail;
 
         // 1. Input Safety
         const isSafe = !inputGuard || inputGuard.passed;
@@ -769,7 +945,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'Input Safety Filter',
             isSafe ? 'Passed (Safe)' : 'Refused (Unsafe)',
             isSafe,
-            inputGuard && inputGuard.reasons ? inputGuard.reasons.join(', ') : 'Content safe'
+            inputGuard && inputGuard.reasons && inputGuard.reasons.length > 0 ? inputGuard.reasons.join(', ') : 'Content safe'
         );
 
         // 2. Off-Topic Domain Check
@@ -784,13 +960,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 3. Groundedness Score
         const isGrounded = data.answer && data.answer.grounded;
-        const groundScore = (data.answer && data.answer.grounding_score) ? (data.answer.grounding_score * 100).toFixed(1) : '95.0';
+        const groundScore = (data.answer && typeof data.answer.grounding_score === 'number')
+            ? (data.answer.grounding_score * 100).toFixed(1)
+            : '95.0';
         addGuardrailBadge(
             'fa-link',
             'Groundedness Support',
             isGrounded ? `${groundScore}% Overlap` : 'Insufficient Support',
             isGrounded,
-            'Lexical support against retrieved context'
+            'Lexical overlap against retrieved context'
         );
 
         // 4. Citation Verification
@@ -810,9 +988,9 @@ document.addEventListener('DOMContentLoaded', () => {
         badge.innerHTML = `
             <i class="fa-solid ${icon} guardrail-icon"></i>
             <div>
-                <div class="guardrail-label">${label}</div>
-                <div class="guardrail-val">${value}</div>
-                <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 0.15rem;">${subtitle}</div>
+                <div class="guardrail-label">${escapeHtml(label)}</div>
+                <div class="guardrail-val">${escapeHtml(value)}</div>
+                <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 0.15rem;">${escapeHtml(subtitle)}</div>
             </div>
         `;
         guardrailBadgesGrid.appendChild(badge);
@@ -822,18 +1000,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // Stages Execution Waterfall
     // =========================================================================
     function renderStagesWaterfall(data) {
+        if (!stagesCard || !stagesWaterfall) return;
         stagesCard.style.display = 'block';
         stagesWaterfall.innerHTML = '';
-        
+
         const timings = data.stage_timings || [];
         const totalMs = data.total_latency_ms || timings.reduce((acc, t) => acc + t.latency_ms, 0);
-        totalLatencyBadge.textContent = `Total: ${totalMs.toFixed(1)} ms`;
+        if (totalLatencyBadge) {
+            totalLatencyBadge.textContent = `Total: ${totalMs.toFixed(1)} ms`;
+        }
 
         const maxStageMs = Math.max(...timings.map(t => t.latency_ms), 10);
 
         const stageIcons = {
             'stt': 'fa-microphone',
-            'guardrail_unsafe': 'fa-shield',
+            'guardrail_unsafe': 'fa-shield-halved',
             'retrieval': 'fa-magnifying-glass',
             'guardrail_off_topic': 'fa-bullseye',
             'generation': 'fa-brain',
@@ -852,7 +1033,7 @@ document.addEventListener('DOMContentLoaded', () => {
             row.innerHTML = `
                 <div class="stage-title-wrap">
                     <i class="fa-solid ${icon}"></i>
-                    <span>${cleanName}</span>
+                    <span>${escapeHtml(cleanName)}</span>
                 </div>
                 <div class="stage-bar-track">
                     <div class="stage-bar-fill" style="width: ${fillPct}%;"></div>
@@ -870,9 +1051,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Context Passages Inspector
     // =========================================================================
     function renderPassages(retrieval) {
+        if (!passagesContainer) return;
         passagesContainer.innerHTML = '';
         if (!retrieval || !retrieval.retrieved || retrieval.retrieved.length === 0) {
-            retrievalCountLabel.textContent = '0 Chunks';
+            if (retrievalCountLabel) retrievalCountLabel.textContent = '0 Chunks';
             passagesContainer.innerHTML = `
                 <div style="color: var(--text-dim); text-align: center; padding: 2.5rem 1rem;">
                     <i class="fa-solid fa-circle-exclamation" style="font-size: 2rem; opacity: 0.4; margin-bottom: 0.8rem; display: block;"></i>
@@ -882,12 +1064,15 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        retrievalCountLabel.textContent = `${retrieval.retrieved.length} Chunks`;
+        if (retrievalCountLabel) {
+            retrievalCountLabel.textContent = `${retrieval.retrieved.length} Chunks`;
+        }
 
-        retrieval.retrieved.forEach((rc, i) => {
+        retrieval.retrieved.forEach((rc) => {
             const card = document.createElement('div');
             card.className = 'passage-card';
             card.id = `chunk-${rc.chunk.chunk_id}`;
+            card.setAttribute('data-doc-id', rc.chunk.doc_id || '');
 
             const strategy = rc.source_strategy || rc.chunk.strategy || 'Hybrid';
             const rrf = (rc.score || 0).toFixed(4);
@@ -896,7 +1081,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             card.innerHTML = `
                 <div class="passage-card-top">
-                    <span class="strategy-tag">${strategy}</span>
+                    <span class="strategy-tag">${escapeHtml(strategy)}</span>
                     <div class="scores-badge-group">
                         <span class="score-pill" title="Reciprocal Rank Fusion Score">RRF: <strong>${rrf}</strong></span>
                         <span class="score-pill" title="Dense TF-IDF Score">TF: <strong>${tfidf}</strong></span>
@@ -904,7 +1089,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
                 <div class="passage-text">
-                    <span class="chunk-id-tag">[${rc.chunk.chunk_id}]</span>
+                    <span class="chunk-id-tag">[${escapeHtml(rc.chunk.chunk_id)}]</span>
                     ${escapeHtml(rc.chunk.text)}
                 </div>
                 ${rc.chunk.parent_text ? `
@@ -926,15 +1111,22 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================================
     // Corpus Documents Explorer Modal
     // =========================================================================
-    openDocsBtn.addEventListener('click', openCorpusModal);
-    closeDocsModal.addEventListener('click', () => docsModal.style.display = 'none');
-    docsModal.addEventListener('click', (e) => {
-        if (e.target === docsModal) docsModal.style.display = 'none';
-    });
+    if (openDocsBtn && docsModal) {
+        openDocsBtn.addEventListener('click', openCorpusModal);
+    }
+    if (closeDocsModal && docsModal) {
+        closeDocsModal.addEventListener('click', () => { docsModal.style.display = 'none'; });
+    }
+    if (docsModal) {
+        docsModal.addEventListener('click', (e) => {
+            if (e.target === docsModal) docsModal.style.display = 'none';
+        });
+    }
 
     async function openCorpusModal() {
+        if (!docsModal) return;
         docsModal.style.display = 'flex';
-        if (allDocuments.length === 0) {
+        if (allDocuments.length === 0 && docsListContainer) {
             docsListContainer.innerHTML = '<div style="text-align: center; padding: 2rem;"><div class="spinner" style="margin: 0 auto 1rem;"></div>Loading MSMARCO-XI Corpus...</div>';
             try {
                 const res = await fetch('/api/documents');
@@ -950,17 +1142,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    docSearchInput.addEventListener('input', () => {
-        const query = docSearchInput.value.toLowerCase().trim();
-        const filtered = allDocuments.filter(d => 
-            (d.text && d.text.toLowerCase().includes(query)) ||
-            (d.id && d.id.toLowerCase().includes(query)) ||
-            (d.metadata && d.metadata.query && d.metadata.query.toLowerCase().includes(query))
-        );
-        renderCorpusDocuments(filtered);
-    });
+    if (docSearchInput) {
+        docSearchInput.addEventListener('input', () => {
+            const query = docSearchInput.value.toLowerCase().trim();
+            const filtered = allDocuments.filter(d =>
+                (d.text && d.text.toLowerCase().includes(query)) ||
+                (d.id && d.id.toLowerCase().includes(query)) ||
+                (d.metadata && d.metadata.query && d.metadata.query.toLowerCase().includes(query))
+            );
+            renderCorpusDocuments(filtered);
+        });
+    }
 
     function renderCorpusDocuments(docs) {
+        if (!docsListContainer) return;
         if (!docs || docs.length === 0) {
             docsListContainer.innerHTML = '<div style="color: var(--text-dim); text-align: center; padding: 2rem;">No matching documents found.</div>';
             return;
@@ -975,8 +1170,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             card.innerHTML = `
                 <div class="doc-meta">
-                    <strong>[${doc.id}] ${langBadge}</strong>
-                    <span>Source: ${doc.metadata?.source || 'MSMARCO-XI'}</span>
+                    <strong>[${escapeHtml(doc.id)}] ${langBadge}</strong>
+                    <span>Source: ${escapeHtml(doc.metadata?.source || 'MSMARCO-XI')}</span>
                 </div>
                 <div style="font-size: 0.88rem; font-weight: 700; color: var(--primary-light); margin-bottom: 0.4rem;">
                     Target Query: "${escapeHtml(queryLabel)}"
@@ -991,7 +1186,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 docsModal.style.display = 'none';
                 if (queryLabel && queryLabel !== 'Passage') {
                     queryInput.value = queryLabel;
-                    clearInputBtn.style.display = 'flex';
+                    if (clearInputBtn) clearInputBtn.style.display = 'flex';
                     handleTextQuerySubmit(queryLabel);
                 }
             });
@@ -1002,21 +1197,27 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================================
     // Query History Drawer
     // =========================================================================
-    openHistoryBtn.addEventListener('click', () => historyDrawer.classList.add('open'));
-    closeHistoryDrawer.addEventListener('click', () => historyDrawer.classList.remove('open'));
-    clearHistoryBtn.addEventListener('click', () => {
-        queryHistory = [];
-        localStorage.removeItem('voicerag_history');
-        renderHistory();
-        showToast('Query history cleared', 'info');
-    });
+    if (openHistoryBtn && historyDrawer) {
+        openHistoryBtn.addEventListener('click', () => historyDrawer.classList.add('open'));
+    }
+    if (closeHistoryDrawer && historyDrawer) {
+        closeHistoryDrawer.addEventListener('click', () => historyDrawer.classList.remove('open'));
+    }
+    if (clearHistoryBtn) {
+        clearHistoryBtn.addEventListener('click', () => {
+            queryHistory = [];
+            localStorage.removeItem('voicerag_history');
+            renderHistory();
+            showToast('Query history cleared', 'info');
+        });
+    }
 
     function saveToHistory(data) {
         if (!data.query_text) return;
         const entry = {
             id: data.request_id || Date.now().toString(),
             query: data.query_text,
-            status: data.status,
+            status: data.status || 'ok',
             latency: data.total_latency_ms ? data.total_latency_ms.toFixed(1) : '0',
             time: new Date().toLocaleTimeString()
         };
@@ -1027,30 +1228,49 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderHistory() {
+        if (!historyListContainer) return;
         if (!queryHistory || queryHistory.length === 0) {
             historyListContainer.innerHTML = '<div style="color: var(--text-dim); text-align: center; padding: 2.5rem;">No recent queries.</div>';
             return;
         }
 
         historyListContainer.innerHTML = '';
-        queryHistory.forEach(item => {
+        queryHistory.forEach((item, index) => {
             const el = document.createElement('div');
             el.className = 'history-item';
             el.innerHTML = `
-                <div style="display: flex; justify-content: space-between; font-size: 0.76rem; color: var(--text-dim); margin-bottom: 0.35rem;">
-                    <span>${item.time}</span>
-                    <span style="color: ${item.status === 'ok' ? 'var(--primary-light)' : 'var(--accent-rose)'}; font-weight: 700;">
-                        ${item.status.toUpperCase()} (${item.latency} ms)
-                    </span>
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.76rem; color: var(--text-dim); margin-bottom: 0.35rem;">
+                    <span>${escapeHtml(item.time)}</span>
+                    <div style="display: flex; align-items: center; gap: 0.4rem;">
+                        <span style="color: ${item.status === 'ok' ? 'var(--primary-light)' : 'var(--accent-rose)'}; font-weight: 700;">
+                            ${escapeHtml(item.status.toUpperCase())} (${escapeHtml(item.latency)} ms)
+                        </span>
+                        <button class="delete-history-btn" title="Delete entry" style="background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 0.1rem 0.3rem;">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
                 </div>
                 <div style="font-size: 0.92rem; font-weight: 600; color: var(--text-main);">
                     ${escapeHtml(item.query)}
                 </div>
             `;
+
+            // Delete individual item button
+            const delBtn = el.querySelector('.delete-history-btn');
+            if (delBtn) {
+                delBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    queryHistory.splice(index, 1);
+                    localStorage.setItem('voicerag_history', JSON.stringify(queryHistory));
+                    renderHistory();
+                    showToast('History entry removed', 'info');
+                });
+            }
+
             el.addEventListener('click', () => {
-                historyDrawer.classList.remove('open');
+                if (historyDrawer) historyDrawer.classList.remove('open');
                 queryInput.value = item.query;
-                clearInputBtn.style.display = 'flex';
+                if (clearInputBtn) clearInputBtn.style.display = 'flex';
                 handleTextQuerySubmit(item.query);
             });
             historyListContainer.appendChild(el);
@@ -1062,25 +1282,35 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================================
     function setLoading(isLoading, statusText = '') {
         if (isLoading) {
-            sendBtn.disabled = true;
-            sendBtn.innerHTML = '<div class="spinner"></div>';
-            recordingStatus.textContent = statusText || 'Processing...';
-            micBtn.classList.add('processing');
+            if (sendBtn) {
+                sendBtn.disabled = true;
+                sendBtn.innerHTML = '<div class="spinner"></div>';
+            }
+            if (recordingStatus) recordingStatus.textContent = statusText || 'Processing...';
+            if (micBtn) micBtn.classList.add('processing');
         } else {
-            sendBtn.disabled = false;
-            sendBtn.innerHTML = '<span>Ask</span><i class="fa-solid fa-paper-plane"></i>';
-            recordingStatus.textContent = 'Click orb to speak or enter question below';
-            micBtn.classList.remove('processing');
+            if (sendBtn) {
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = '<span>Ask</span><i class="fa-solid fa-paper-plane"></i>';
+            }
+            if (recordingStatus) recordingStatus.textContent = 'Click orb to speak or enter question below';
+            if (micBtn) micBtn.classList.remove('processing');
         }
     }
 
     function renderErrorState(errMsg) {
-        answerCard.style.display = 'block';
-        answerStatusBadge.className = 'badge-confidence refused';
-        answerStatusBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Error';
-        answerText.innerHTML = `<span style="color: var(--accent-rose); font-weight: 600;">Request Error:</span> ${escapeHtml(errMsg)}`;
-        citationsList.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-dim);">None</span>';
-        audioPlayerBar.style.display = 'none';
+        if (answerCard) answerCard.style.display = 'block';
+        if (answerStatusBadge) {
+            answerStatusBadge.className = 'badge-confidence refused';
+            answerStatusBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Error';
+        }
+        if (answerText) {
+            answerText.innerHTML = `<span style="color: var(--accent-rose); font-weight: 600;">Request Error:</span> ${escapeHtml(errMsg)}`;
+        }
+        if (citationsList) {
+            citationsList.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-dim);">None</span>';
+        }
+        if (audioPlayerBar) audioPlayerBar.style.display = 'none';
     }
 
     function escapeHtml(str) {
