@@ -1,18 +1,16 @@
-# Voice-Enabled RAG Pipeline (MSMARCO-XI)
+# Voice-Enabled RAG Pipeline (MSMARCO-XI 10,000 Rows) • Google Gemini & Vercel
 
-Voice question → Sarvam STT → hybrid multi-strategy retrieval → grounded
-answer generation, wrapped in a structured harness with retries and
-guardrails.
+Voice question → Sarvam STT → hybrid multi-strategy retrieval across 10,000 MSMARCO-XI documents → grounded answer generation with **Google Gemini Flash (Cloud API)**, wrapped in a structured harness with retries, guardrails, and Sarvam TTS spoken audio.
 
 ```
-audio ──▶ SarvamSTT ──▶ InputGuardrail(unsafe) ──▶ HybridMultiStrategyRetriever
+audio ──▶ SarvamSTT ──▶ InputGuardrail(unsafe) ──▶ HybridMultiStrategyRetriever (10k Docs)
                                                               │
                               ┌───────────────────────────────┘
                               ▼
                     InputGuardrail(off-topic)  ──refused──▶ (stop, no LLM call)
                               │ pass
                               ▼
-                    ClaudeGenerator (retries)
+                    GeminiGenerator (Google Gemini Flash / Pro)
                               │
                               ▼
                     OutputGuardrail(groundedness + citations) ──▶ refuse or return
@@ -21,37 +19,45 @@ audio ──▶ SarvamSTT ──▶ InputGuardrail(unsafe) ──▶ HybridMulti
 All of this is orchestrated by `harness.py`'s `VoiceRAGHarness`, not a
 single prompt-in/text-out call — see **Harness** below.
 
-## Repo layout
+## Repo Layout
 
 | file              | purpose |
 |-------------------|---------|
-| `data_loader.py`  | loads `ai4bharat/MSMARCO-XI` (real HF path) or the bundled sample (`data/sample_msmarco_xi.jsonl`) |
-| `chunking.py`     | 4 chunking strategies (see below) |
-| `retrieval.py`    | hybrid dense+lexical retriever, fused across all chunking strategies |
+| `data_loader.py`  | loads the full **10,000-row MSMARCO-XI dataset** (`data/msmarco_xi_10000.jsonl` / `data/sample_msmarco_xi.jsonl`) |
+| `chunking.py`     | 4 chunking strategies with precomputed compressed cache (`data/chunks_cache.json.gz`) |
+| `retrieval.py`    | hybrid dense+lexical retriever (TF-IDF character n-grams + BM25Okapi + Reciprocal Rank Fusion) |
 | `stt.py`          | Sarvam AI speech-to-text wrapper (`saaras:v3`) |
-| `generator.py`    | **Ollama** (offline/local, incl. Hugging Face GGUF models) generation + deterministic extractive fallback; `ClaudeGenerator` kept for reference |
+| `generator.py`    | **Google Gemini API** (`GeminiGenerator`) with resilient multi-model fallback (`gemini-flash-latest`, `gemini-3.6-flash`, `gemini-3.7-flash`, `gemini-pro-latest`) + Groq / OpenAI / Claude / Ollama / Extractive backends |
 | `guardrails.py`   | input (unsafe / off-topic) and output (groundedness / citation) guardrails |
 | `harness.py`      | orchestration: per-stage timing, retries, structured error handling |
+| `tts.py`          | Sarvam AI text-to-speech wrapper (`bulbul:v2`) |
+| `app.py`          | FastAPI server & REST API serving the modern web frontend |
+| `api/index.py`    | Vercel Serverless ASGI entrypoint |
+| `vercel.json`     | Vercel build and routing configuration |
 | `benchmark.py`    | runs the pipeline over N queries, reports P50/P70/P100 latency |
 | `cli.py`          | run a single query end-to-end from the command line |
 
-## Setup
+## Quickstart & Local Setup
 
 ```bash
 pip install -r requirements.txt
-export SARVAM_API_KEY=...      # optional — enables real STT instead of mock/text input
 
-# LLM backend: defaults to Ollama (offline/local). Install Ollama, then
-# pull a model — either from Ollama's own library or, as requested,
-# directly from the Hugging Face Hub in GGUF format:
-ollama pull llama3.1                                   # Ollama's library, or:
-ollama pull hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF  # any HF GGUF repo
+# Run FastAPI backend locally
+uvicorn app:app --reload --port 8000
+```
 
-export OLLAMA_HOST=http://localhost:11434   # default, change if Ollama runs elsewhere
-export OLLAMA_MODEL=llama3.1                # or the hf.co/... tag you pulled
-# export GENERATOR_BACKEND=ollama           # ollama (default) | claude | extractive
+## Vercel Deployment
 
-python cli.py --text "मधुमेह के लक्षण क्या हैं?"
+Deploying on Vercel is zero-config:
+1. Push this repository to GitHub or run `vercel` in the project root.
+2. In the Vercel project dashboard under **Settings → Environment Variables**, add:
+   - `GEMINI_API_KEY`: Your Google Gemini API Key
+   - `GENERATOR_BACKEND`: `gemini`
+   - `GEMINI_MODEL`: `gemini-flash-latest`
+   - `SARVAM_API_KEY`: Your Sarvam AI API Key
+3. Vercel automatically builds `api/index.py` using `@vercel/python` and serves the app.
+
+```bash
 python benchmark.py --n 40
 ```
 

@@ -62,13 +62,14 @@ HARNESS = VoiceRAGHarness(retriever=RETRIEVER, stt=STT, tts=TTS, generator=GENER
 def get_generator_info(gen=None) -> dict:
     active_gen = gen or GENERATOR
     cname = active_gen.__class__.__name__
+    model_name = getattr(active_gen, "model", "default")
     name_map = {
-        "GroqGenerator": "Groq (Llama 3.3 70B)",
-        "GeminiGenerator": "Google Gemini 2.0 Flash",
-        "OpenAIGenerator": "OpenAI GPT-4o-mini",
-        "ClaudeGenerator": "Anthropic Claude 3.5",
-        "OpenRouterGenerator": "OpenRouter",
-        "OllamaGenerator": "Ollama (Local LLM)",
+        "GeminiGenerator": f"Google Gemini Flash ({model_name})",
+        "GroqGenerator": f"Groq ({model_name})",
+        "OpenAIGenerator": f"OpenAI ({model_name})",
+        "ClaudeGenerator": f"Anthropic Claude ({model_name})",
+        "OpenRouterGenerator": f"OpenRouter ({model_name})",
+        "OllamaGenerator": f"Ollama ({model_name})",
         "SmartExtractiveGenerator": "Smart Extractive QA",
         "ExtractiveFallbackGenerator": "Smart Extractive QA",
     }
@@ -76,8 +77,9 @@ def get_generator_info(gen=None) -> dict:
         "class": cname,
         "name": name_map.get(cname, cname),
         "is_cloud_llm": cname not in ("SmartExtractiveGenerator", "ExtractiveFallbackGenerator", "OllamaGenerator"),
-        "model": getattr(active_gen, "model", "extractive"),
+        "model": model_name,
     }
+
 
 
 print(f"[server] Pipeline ready! Indexed {len(DOCS)} docs into {len(CHUNKS)} chunks. Active Generator: {get_generator_info()['name']}")
@@ -126,8 +128,11 @@ def get_stats():
 
 
 @app.get("/api/documents")
-def get_documents() -> List[Dict]:
+def get_documents(limit: Optional[int] = 500) -> List[Dict]:
+    if limit and limit > 0:
+        return DOCS[:limit]
     return DOCS
+
 
 
 @app.post("/api/query")
@@ -225,7 +230,8 @@ for d in _STATIC_CANDIDATES:
 os.makedirs(STATIC_DIR, exist_ok=True)
 
 # Serve Frontend static files
-app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static_assets")
+app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static_root")
 
 if __name__ == "__main__":
     import uvicorn

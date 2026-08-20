@@ -220,10 +220,46 @@ DEFAULT_STRATEGIES = {
 }
 
 
-def build_all_chunks(docs: List[dict]) -> List[Chunk]:
+def build_all_chunks(docs: List[dict], use_cache: bool = True) -> List[Chunk]:
     """docs: list of {id, text, language, metadata}. Runs every strategy,
     each wrapped for parent/child + metadata, and returns the union — the
-    retriever later fuses matches across strategies."""
+    retriever later fuses matches across strategies.
+    Uses precomputed chunks cache if available for instant startup.
+    """
+    import os
+    import json
+    import gzip
+
+    if use_cache and len(docs) >= 1000:
+        candidate_cache_paths = [
+            os.path.join(os.path.dirname(__file__), "data", "chunks_cache.json.gz"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "voice_rag", "data", "chunks_cache.json.gz"),
+            os.path.join(os.getcwd(), "voice_rag", "data", "chunks_cache.json.gz"),
+            os.path.join(os.getcwd(), "data", "chunks_cache.json.gz"),
+        ]
+        for cp in candidate_cache_paths:
+            if os.path.exists(cp):
+                try:
+                    with gzip.open(cp, "rt", encoding="utf-8") as f:
+                        data = json.load(f)
+                    chunks = [
+                        Chunk(
+                            chunk_id=item["chunk_id"],
+                            doc_id=item["doc_id"],
+                            text=item["text"],
+                            strategy=item["strategy"],
+                            language=item.get("language", "unknown"),
+                            position=item.get("position", 0),
+                            parent_text=item.get("parent_text"),
+                            metadata=item.get("metadata", {})
+                        )
+                        for item in data
+                    ]
+                    if len(chunks) > 0:
+                        return chunks
+                except Exception:
+                    pass
+
     all_chunks: List[Chunk] = []
     for d in docs:
         for strat in DEFAULT_STRATEGIES.values():
@@ -233,3 +269,4 @@ def build_all_chunks(docs: List[dict]) -> List[Chunk]:
                               extra_metadata=d.get("metadata", {}))
             )
     return all_chunks
+

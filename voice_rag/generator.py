@@ -308,12 +308,20 @@ class GroqGenerator(BaseLLMGenerator):
 
 
 class GeminiGenerator(BaseLLMGenerator):
-    """Cloud generation via Google Gemini API (Gemini 2.0 Flash / 1.5 Flash)."""
+    """Cloud generation via Google Gemini API (Gemini Flash / Pro)."""
 
     def __init__(self, api_key: str | None = None, model: str | None = None):
         super().__init__()
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-        self.model = model or os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+        self.model = model or os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
+        self.candidate_models = [
+            self.model,
+            "gemini-flash-latest",
+            "gemini-3.6-flash",
+            "gemini-3.7-flash",
+            "gemini-pro-latest",
+            "gemini-2.5-flash",
+        ]
 
     def generate(self, query: str, retrieval: RetrievalResult, max_retries: int = 2) -> GeneratedAnswer:
         if not self.api_key or not retrieval.retrieved:
@@ -321,46 +329,68 @@ class GeminiGenerator(BaseLLMGenerator):
 
         context = self._build_context(retrieval)
         prompt = f"{SYSTEM_PROMPT}\n\nContext chunks:\n{context}\n\nQuestion: {query}"
-        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
         t0 = time.perf_counter()
 
-        for attempt in range(1, max_retries + 2):
-            try:
-                resp = requests.post(
-                    endpoint,
-                    headers={"Content-Type": "application/json"},
-                    json={
-                        "contents": [{"parts": [{"text": prompt}]}],
-                        "generationConfig": {
-                            "temperature": 0.1,
-                            "responseMimeType": "application/json",
-                        }
-                    },
-                    timeout=15,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                content = data["candidates"][0]["content"]["parts"][0]["text"]
-                parsed = _parse_llm_json_response(content)
-                latency_ms = (time.perf_counter() - t0) * 1000
-                raw_cits = parsed.get("citations", [])
-                cits = [clean_citation_id(c) for c in raw_cits if clean_citation_id(c)]
+        # Try active model and fallbacks if necessary
+        models_to_try = []
+        for m in self.candidate_models:
+            if m not in models_to_try:
+                models_to_try.append(m)
 
-                return GeneratedAnswer(
-                    answer_text=parsed.get("answer", ""),
-                    citations=cits,
-                    grounded=not parsed.get("abstain", False),
-                    abstained=bool(parsed.get("abstain", False)),
-                    latency_ms=latency_ms,
-                    attempts=attempt,
-                )
-            except Exception:
-                time.sleep(0.2 * attempt)
-                continue
+        last_err = None
+        for current_model in models_to_try:
+            endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{current_model}:generateContent?key={self.api_key}"
+            for attempt in range(1, max_retries + 2):
+                try:
+                    resp = requests.post(
+                        endpoint,
+                        headers={
+                            "Content-Type": "application/json",
+                            "x-goog-api-key": self.api_key,
+                        },
+                        json={
+                            "contents": [{"parts": [{"text": prompt}]}],
+                            "generationConfig": {
+                                "temperature": 0.1,
+                                "responseMimeType": "application/json",
+                            }
+                        },
+                        timeout=15,
+                    )
+                    if resp.status_code == 404:
+                        # Model retired/renamed, try next model in candidate list
+                        break
+                    resp.raise_for_status()
+                    data = resp.json()
+                    candidates = data.get("candidates", [])
+                    if not candidates:
+                        break
+                    content = candidates[0]["content"]["parts"][0]["text"]
+                    parsed = _parse_llm_json_response(content)
+                    latency_ms = (time.perf_counter() - t0) * 1000
+                    raw_cits = parsed.get("citations", [])
+                    cits = [clean_citation_id(c) for c in raw_cits if clean_citation_id(c)]
+
+                    # Remember working model
+                    self.model = current_model
+
+                    return GeneratedAnswer(
+                        answer_text=parsed.get("answer", ""),
+                        citations=cits,
+                        grounded=not parsed.get("abstain", False),
+                        abstained=bool(parsed.get("abstain", False)),
+                        latency_ms=latency_ms,
+                        attempts=attempt,
+                    )
+                except Exception as ex:
+                    last_err = ex
+                    time.sleep(0.2 * attempt)
+                    continue
 
         fb = self.fallback.generate(query, retrieval)
         fb.attempts = max_retries + 1
         return fb
+
 
 
 class OpenAIGenerator(BaseLLMGenerator):
@@ -646,11 +676,11 @@ def make_generator(backend: str | None = None):
     if raw_backend in ("extractive", "fallback", "offline"):
         return SmartExtractiveGenerator()
 
-    # Auto-detection mode (default)
-    if os.environ.get("GROQ_API_KEY"):
-        return GroqGenerator()
+    # Auto-detection mode (default) - Google Gemini prioritized
     if os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
         return GeminiGenerator()
+    if os.environ.get("GROQ_API_KEY"):
+        return GroqGenerator()
     if os.environ.get("OPENAI_API_KEY"):
         return OpenAIGenerator()
     if os.environ.get("ANTHROPIC_API_KEY"):
@@ -665,3 +695,4 @@ def make_generator(backend: str | None = None):
 
     # High-accuracy smart extractive fallback
     return SmartExtractiveGenerator()
+

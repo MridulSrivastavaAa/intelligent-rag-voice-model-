@@ -5,3 +5,6 @@ __pycache__/
 *.wav
 *.mp3
 *.webm
+.env
+.env.*
+!.env.example

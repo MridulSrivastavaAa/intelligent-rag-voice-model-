@@ -143,6 +143,16 @@ class TestVoiceRAGPipeline(unittest.TestCase):
         self.assertEqual(sents[0], "यह पहली पंक्ति है।")
         self.assertEqual(sents[1], "यह दूसरी पंक्ति है!")
 
+    def test_gemini_generator_direct(self):
+        """Test GeminiGenerator directly with retrieved chunks."""
+        retrieval = self.retriever.retrieve("मधुमेह के लक्षण क्या हैं?")
+        gemini = GeminiGenerator()
+        ans = gemini.generate("मधुमेह के लक्षण क्या हैं?", retrieval)
+        self.assertFalse(ans.abstained)
+        self.assertTrue(ans.grounded)
+        self.assertTrue(len(ans.answer_text) > 5)
+        self.assertGreater(len(ans.citations), 0)
+
     def test_tts_synthesis(self):
         """Test SarvamTTS synthesis."""
         from tts import SarvamTTS
@@ -159,3 +169,4 @@ class TestVoiceRAGPipeline(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -10,8 +10,12 @@ import json
 import os
 from typing import List, Dict
 
-# Candidate paths for sample dataset
+# Candidate paths for dataset (prioritizing the full 10,000 row MSMARCO-XI index)
 _CANDIDATE_PATHS = [
+    os.path.join(os.path.dirname(__file__), "data", "msmarco_xi_10000.jsonl"),
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "voice_rag", "data", "msmarco_xi_10000.jsonl"),
+    os.path.join(os.getcwd(), "voice_rag", "data", "msmarco_xi_10000.jsonl"),
+    os.path.join(os.getcwd(), "data", "msmarco_xi_10000.jsonl"),
     os.path.join(os.path.dirname(__file__), "data", "sample_msmarco_xi.jsonl"),
     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "voice_rag", "data", "sample_msmarco_xi.jsonl"),
     os.path.join(os.getcwd(), "voice_rag", "data", "sample_msmarco_xi.jsonl"),
@@ -23,6 +27,7 @@ for p in _CANDIDATE_PATHS:
     if os.path.exists(p):
         SAMPLE_PATH = p
         break
+
 
 # Embedded sample dataset fallback in case filesystem packaging isolates .jsonl files on Vercel
 _EMBEDDED_DOCS = [
